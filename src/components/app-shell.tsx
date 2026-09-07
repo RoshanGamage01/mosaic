@@ -58,7 +58,13 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarBody({
+  connected,
+  onNavigate,
+}: {
+  connected: boolean;
+  onNavigate?: () => void;
+}) {
   return (
     <div className="flex h-full flex-col gap-6 p-4">
       <Link href="/" onClick={onNavigate} className="px-2 pt-2">
@@ -76,23 +82,40 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
 
       <NavLinks onNavigate={onNavigate} />
 
-      <div className="mt-auto rounded-xl border border-dashed border-border bg-muted/40 p-3.5">
-        <p className="text-[13px] font-medium">Nothing to configure</p>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-          Mosaic reads your database directly. Connect one and it works out what is inside.
-        </p>
-      </div>
+      {/* Setup advice is only advice until there is something connected. */}
+      {connected ? null : (
+        <div className="mt-auto rounded-xl border border-dashed border-border bg-muted/40 p-3.5">
+          <p className="text-[13px] font-medium">Nothing to configure</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Mosaic reads your database directly. Connect one and it works out what is inside.
+          </p>
+          <Button
+            render={<Link href="/data?connect=1" onClick={onNavigate} />}
+            variant="outline"
+            size="sm"
+            className="mt-3 w-full rounded-lg"
+          >
+            Connect a database
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  connected,
+}: {
+  children: React.ReactNode;
+  connected: boolean;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
     <div className="app-canvas flex min-h-dvh">
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-sidebar-border bg-sidebar/70 backdrop-blur-xl lg:block">
-        <SidebarBody />
+        <SidebarBody connected={connected} />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -103,7 +126,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </SheetTrigger>
             <SheetContent side="left" className="w-72 p-0">
               <SheetTitle className="sr-only">Navigation</SheetTitle>
-              <SidebarBody onNavigate={() => setOpen(false)} />
+              <SidebarBody connected={connected} onNavigate={() => setOpen(false)} />
             </SheetContent>
           </Sheet>
           <Wordmark />
