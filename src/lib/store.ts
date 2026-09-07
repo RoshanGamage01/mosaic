@@ -3,6 +3,7 @@ import "server-only";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { getDb } from "./agent/client";
 import type { Catalog, Dashboard, DataSource, Report } from "./types";
 
 /**
@@ -32,6 +33,67 @@ const dataDir = process.env.MOSAIC_DATA_DIR
   : path.join(process.cwd(), ".mosaic");
 const dataFile = path.join(dataDir, "workspace.json");
 
+/**
+ * Where the workspace is kept. A JSON file is the friendliest default — you
+ * can read it, copy it, and hand-edit it. But a container without a mounted
+ * volume throws that file away on every restart, so an operator can point
+ * Mosaic at a MongoDB database instead and get the same single document back.
+ */
+type Backend = {
+  read(): Promise<Database | null>;
+  write(db: Database): Promise<void>;
+  description: string;
+};
+
+const WORKSPACE_ID = "workspace";
+
+function fileBackend(): Backend {
+  return {
+    description: dataFile,
+    async read() {
+      try {
+        return JSON.parse(await readFile(dataFile, "utf8")) as Database;
+      } catch {
+        return null;
+      }
+    },
+    async write(db) {
+      await mkdir(dataDir, { recursive: true });
+      // Written beside the target and renamed, so a crash mid-write cannot
+      // leave a half-finished workspace behind.
+      const tmp = `${dataFile}.${process.pid}.tmp`;
+      await writeFile(tmp, JSON.stringify(db, null, 2), "utf8");
+      await rename(tmp, dataFile);
+    },
+  };
+}
+
+function mongoBackend(uri: string, database: string): Backend {
+  const collection = process.env.MOSAIC_STORE_COLLECTION || "mosaic_workspace";
+  return {
+    description: `${database}.${collection}`,
+    async read() {
+      const db = await getDb(uri, database);
+      const doc = await db.collection(collection).findOne({ _id: WORKSPACE_ID as never });
+      if (!doc) return null;
+      const { _id, ...rest } = doc;
+      void _id;
+      return rest as unknown as Database;
+    },
+    async write(db) {
+      const target = await getDb(uri, database);
+      await target
+        .collection(collection)
+        .replaceOne({ _id: WORKSPACE_ID as never }, db as never, { upsert: true });
+    },
+  };
+}
+
+const storeUri = process.env.MOSAIC_STORE_URI;
+const backend: Backend = storeUri
+  ? mongoBackend(storeUri, process.env.MOSAIC_STORE_DB || "mosaic")
+  : fileBackend();
+
 type Cache = { loading: Promise<Database> | null; queue: Promise<unknown> };
 
 const globalCache = globalThis as unknown as { __mosaicStore?: Cache };
@@ -43,17 +105,15 @@ const cache: Cache = (globalCache.__mosaicStore ??= { loading: null, queue: Prom
  * over a copy the other has already mutated.
  */
 function load(): Promise<Database> {
-  cache.loading ??= readFile(dataFile, "utf8")
-    .then((raw) => ({ ...emptyDatabase(), ...(JSON.parse(raw) as Database) }))
+  cache.loading ??= backend
+    .read()
+    .then((stored) => ({ ...emptyDatabase(), ...(stored ?? {}) }))
     .catch(() => emptyDatabase());
   return cache.loading;
 }
 
 async function persist(db: Database) {
-  await mkdir(dataDir, { recursive: true });
-  const tmp = `${dataFile}.${process.pid}.tmp`;
-  await writeFile(tmp, JSON.stringify(db, null, 2), "utf8");
-  await rename(tmp, dataFile);
+  await backend.write(db);
 }
 
 /** Serialises writers so two concurrent requests cannot clobber each other. */
@@ -182,4 +242,9 @@ export const store = {
   },
 };
 
-export const storeLocation = { dataDir, dataFile };
+export const storeLocation = {
+  dataDir,
+  dataFile,
+  kind: storeUri ? ("mongodb" as const) : ("file" as const),
+  description: backend.description,
+};

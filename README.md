@@ -91,6 +91,7 @@ All settings are environment variables; see `.env.example`.
 | Variable | What it does |
 | --- | --- |
 | `MOSAIC_DATA_DIR` | Where Mosaic keeps its own state. Defaults to `./.mosaic`. |
+| `MOSAIC_STORE_URI` / `MOSAIC_STORE_DB` / `MOSAIC_STORE_COLLECTION` | Keep that state in MongoDB instead of a file. |
 | `MOSAIC_DEMO_URI` / `MOSAIC_DEMO_DB` / `MOSAIC_DEMO_NAME` | A database to register and scan automatically on a brand new install. Leave unset in production. |
 | `NEXT_PUBLIC_MOSAIC_CURRENCY` | Currency used to format money fields. Defaults to `USD`. |
 | `NEXT_PUBLIC_MOSAIC_LOCALE` | Locale used for numbers and dates. Defaults to `en-US`. |
@@ -99,6 +100,12 @@ Connections, catalogs, reports and dashboards live in a single JSON file at
 `$MOSAIC_DATA_DIR/workspace.json`. Back that file up and you have backed up the
 whole workspace. Connection links are stored server-side and are never sent to
 the browser.
+
+If Mosaic runs somewhere with no durable disk — a container without a mounted
+volume — set `MOSAIC_STORE_URI` and the same document is kept in MongoDB
+instead. That database is Mosaic's own bookkeeping and has nothing to do with
+the databases it reports on; it can be a small one of its own. Either way
+Mosaic expects to be a single instance, so run one copy per workspace.
 
 ## Deploying it as an agent
 
@@ -109,10 +116,11 @@ npm run build
 npm run start
 ```
 
-Run it on a host that can reach the databases you want to report on, give it a
-persistent volume for `MOSAIC_DATA_DIR`, and put it behind whatever
-authentication your other internal tools use. It holds no data of its own — every
-number is read live from the source database at the moment a report runs.
+Run it on a host that can reach the databases you want to report on, give it
+somewhere durable to keep its workspace (a volume for `MOSAIC_DATA_DIR`, or
+`MOSAIC_STORE_URI` pointing at a MongoDB), and put it behind whatever
+authentication your other internal tools use. It caches nothing — every number
+is read live from the source database at the moment a report runs.
 
 ## How it is put together
 
@@ -132,7 +140,7 @@ src/
       run.ts           executes a spec and normalises the result
       shape.ts         reshapes flat results for charting
       warnings.ts      explains when a breakdown will inflate the numbers
-    store.ts           the JSON-backed workspace
+    store.ts           the workspace, in a JSON file or in MongoDB
     types.ts           the report spec and catalog schemas
   components/
     builder/           the report builder
