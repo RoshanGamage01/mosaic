@@ -112,7 +112,19 @@ export function findField(
       if (extra?.role && field.role !== extra.role) return false;
       return hint.test(field.path) || hint.test(field.label);
     })
-    .sort((a, b) => b.presence - a.presence);
+    .sort((a, b) => {
+      const noise = (field: FieldProfile) =>
+        /(discount|tax|shipping|fee|unit_?price|cost)/i.test(field.path) ? 1 : 0;
+      if (noise(a) !== noise(b)) return noise(a) - noise(b);
+      const exact = (field: FieldProfile) =>
+        /^(total|grand_?total|total_?amount|amount|revenue|net_?total|units_produced|yield_percent)$/i.test(
+          field.path.split(".").pop() ?? "",
+        )
+          ? 1
+          : 0;
+      if (exact(a) !== exact(b)) return exact(b) - exact(a);
+      return b.presence - a.presence;
+    });
   return ranked[0];
 }
 
