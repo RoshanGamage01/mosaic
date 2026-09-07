@@ -71,16 +71,17 @@ export function DashboardView({
   embedded?: boolean;
 }) {
   const router = useRouter();
-  const [dashboard, setDashboard] = useState(initial);
+  const [stored, setDashboard] = useState(initial);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const byId = new Map(reports.map((report) => [report.id, report]));
-  const range = RANGES.find((item) => item.key === (dashboard.timeRange?.preset ?? "all")) ?? RANGES[0];
-
-  if (dashboard.id !== initial.id) {
+  if (stored.id !== initial.id) {
     setDashboard(initial);
   }
+
+  const dashboard = stored.id === initial.id ? stored : initial;
+  const byId = new Map(reports.map((report) => [report.id, report]));
+  const range = RANGES.find((item) => item.key === (dashboard.timeRange?.preset ?? "all")) ?? RANGES[0];
 
   async function persist(patch: Partial<Dashboard>) {
     const next = { ...dashboard, ...patch };
