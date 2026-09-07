@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, useApi } from "@/lib/client";
+import { localId } from "@/lib/ids";
 import type { Dashboard } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +43,7 @@ export function AddToDashboard({ reportId }: { reportId: string }) {
         json: {
           tiles: [
             ...dashboard.tiles,
-            { id: `tile_${Date.now().toString(36)}`, reportId, width: 6, height: "medium" },
+            { id: localId("tile"), reportId, width: 6, height: "medium" },
           ],
         },
       });

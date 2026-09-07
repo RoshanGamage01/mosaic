@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/lib/client";
+import { localId } from "@/lib/ids";
 import type { Dashboard, RelativeUnit, Report, Tile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -170,7 +171,7 @@ export function DashboardView({
               persist({
                 tiles: [
                   ...dashboard.tiles,
-                  { id: `tile_${Date.now().toString(36)}`, reportId, width: 6, height: "medium" },
+                  { id: localId("tile"), reportId, width: 6, height: "medium" },
                 ],
               })
             }
@@ -218,7 +219,7 @@ export function DashboardView({
                 existing={[]}
                 onAdd={(reportId) =>
                   persist({
-                    tiles: [{ id: `tile_${Date.now().toString(36)}`, reportId, width: 6, height: "medium" }],
+                    tiles: [{ id: localId("tile"), reportId, width: 6, height: "medium" }],
                   })
                 }
               />
