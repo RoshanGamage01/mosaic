@@ -247,6 +247,43 @@ export function suggestReports(
   return out.sort((a, b) => b.weight - a.weight);
 }
 
+const GRID = 12;
+
+/**
+ * Lays the starter tiles out so the grid has no holes. Tiles of the same size
+ * stay together — headline numbers first, then half-width charts, then the
+ * full-width ones — and a size that does not divide evenly into a row widens
+ * its last tile to close the gap. Keeping the groups separate means the slack
+ * is absorbed by a number card rather than by stretching a pie across the
+ * whole screen.
+ */
+function packTiles(tiles: { reportId: string; width: number }[]) {
+  const ordered = [...tiles].sort((a, b) => a.width - b.width);
+
+  let row: { width: number }[] = [];
+  const closeRow = () => {
+    const used = row.reduce((total, tile) => total + tile.width, 0);
+    const slack = GRID - used;
+    if (row.length > 0 && slack > 0) {
+      const share = Math.floor(slack / row.length);
+      row.forEach((tile) => (tile.width += share));
+      row[row.length - 1].width += slack - share * row.length;
+    }
+    row = [];
+  };
+
+  for (const tile of ordered) {
+    const previous = row[row.length - 1];
+    const used = row.reduce((total, item) => total + item.width, 0);
+    if (previous && (tile.width !== previous.width || used + tile.width > GRID)) closeRow();
+    row.push(tile);
+    if (row.reduce((total, item) => total + item.width, 0) >= GRID) row = [];
+  }
+  closeRow();
+
+  return ordered;
+}
+
 /** Builds the report objects that back an auto-generated starter dashboard. */
 export function starterDashboard(
   sourceId: string,
@@ -280,5 +317,5 @@ export function starterDashboard(
     });
   });
 
-  return { reports, tiles };
+  return { reports, tiles: packTiles(tiles) };
 }
