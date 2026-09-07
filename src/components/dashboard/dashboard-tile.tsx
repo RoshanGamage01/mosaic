@@ -6,7 +6,6 @@ import {
   ArrowLeftRight,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
   Maximize2,
   Trash2,
 } from "lucide-react";
@@ -76,19 +75,17 @@ export function DashboardTile({
   const { result, error, loading } = useReportData(spec, { debounce: 0 });
   const isKpi = spec.visual === "kpi";
 
-  return (
+  const card = (
     <div
       className={cn(
         "surface group flex min-w-0 flex-col p-5",
         editing && "ring-1 ring-primary/25",
+        !editing && "transition-shadow hover:shadow-md",
       )}
     >
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{report.name}</p>
-          {report.description ? (
-            <p className="truncate text-xs text-muted-foreground">{report.description}</p>
-          ) : null}
         </div>
 
         {editing ? (
@@ -121,16 +118,7 @@ export function DashboardTile({
               <Trash2 className="size-3.5" />
             </Button>
           </div>
-        ) : (
-          <Button
-            render={<Link href={`/reports/${report.id}`} aria-label={`Open ${report.name}`} />}
-            variant="ghost"
-            size="icon"
-            className="size-7 shrink-0 rounded-lg text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-          >
-            <ExternalLink className="size-3.5" />
-          </Button>
-        )}
+        ) : null}
       </div>
 
       <div className="min-w-0 flex-1">
@@ -183,5 +171,12 @@ export function DashboardTile({
         </div>
       ) : null}
     </div>
+  );
+
+  if (editing) return card;
+  return (
+    <Link href={`/reports/${report.id}`} className="block min-h-full min-w-0">
+      {card}
+    </Link>
   );
 }

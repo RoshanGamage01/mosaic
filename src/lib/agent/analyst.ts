@@ -3,6 +3,7 @@ import "server-only";
 import { classifyCollection, mapCatalog, processMeta, type MappedCollection } from "./concepts";
 import { completeJson } from "./llm";
 import { intents } from "./playbook";
+import { playbookTopics } from "./topics";
 import { store } from "../store";
 import type {
   Catalog,
@@ -23,6 +24,7 @@ export type Question = {
 
 export type Analysis = {
   briefing: string;
+  topics: { key: string; label: string; summary: string; records?: number }[];
   reports: Report[];
   dashboards: Dashboard[];
   questions: Question[];
@@ -140,11 +142,15 @@ async function fromModel(tenant: Tenant, catalog: Catalog) {
     })
     .join("\n");
 
-  return completeJson<{ briefing: string; reports: LlmReport[] }>([
+  return completeJson<{
+    briefing: string;
+    reports: LlmReport[];
+    topics?: { process: string; summary: string }[];
+  }>([
     {
       role: "system",
       content:
-        "You are an operations analyst for manufacturing plants and B2B sales forces. Given a MongoDB catalog, identify the real business processes (orders, pipeline, production, machines, inventory) and propose a short briefing plus up to 8 reports a plant manager or sales director would actually open. Return JSON { briefing, reports: [{ name, description, collection, dashboard: 'sales'|'plant', visual, metricField, metricAgg, groupField, grain }] }. Only use collection and field names from the catalog. Prefer revenue, pipeline, units produced, yield, scrap, downtime, stock, work-order status. Never invent fields.",
+        "You are an operations analyst for manufacturing plants and B2B sales forces. Read this MongoDB catalog as a business, not a schema. Identify processes (orders, pipeline, production, work orders, machines, inventory). Return JSON { briefing, topics: [{ process, summary }], reports: [{ name, description, collection, dashboard: 'sales'|'plant', visual, metricField, metricAgg, groupField, grain }] }. Topic summaries are one sentence a plant or sales lead would recognise. Only use collection and field names from the catalog. Never invent fields. Do not mention collection names in briefing or topic summaries.",
     },
     {
       role: "user",
@@ -242,8 +248,17 @@ export async function analyseAndBuild(input: {
   const drafts = applyPlaybook(source.id, tenant, mapped, now);
 
   let briefing = playbookBriefing(tenant, mapped);
+  let topics = playbookTopics(source.id, catalog.collections, tenant.industry);
   const modelled = await fromModel(tenant, catalog);
   if (modelled?.briefing) briefing = modelled.briefing;
+  if (modelled?.topics?.length) {
+    topics = topics.map((topic) => {
+      const hit = modelled.topics?.find(
+        (item) => item.process === topic.key || item.process.toLowerCase() === topic.label.toLowerCase(),
+      );
+      return hit ? { ...topic, summary: hit.summary } : topic;
+    });
+  }
   for (const extra of modelled?.reports ?? []) {
     if (drafts.some((draft) => draft.report.name === extra.name)) continue;
     const resolved = resolveLlmReport(source.id, tenant.id, catalog.collections, extra, now);
@@ -276,18 +291,18 @@ export async function analyseAndBuild(input: {
     emoji: group.emoji,
     kind: group.kind,
     tiles: pack(group.tiles),
-    timeRange: { preset: "all" },
+    timeRange: { preset: "12m", amount: 12, unit: "months" },
     createdAt: now,
     updatedAt: now,
   }));
 
-  return { briefing, reports, dashboards, questions };
+  return { briefing, topics, reports, dashboards, questions };
 }
 
 export async function persistAnalysis(analysis: Analysis, tenantId: string) {
   for (const report of analysis.reports) await store.upsertReport(report);
   for (const dashboard of analysis.dashboards) await store.upsertDashboard(dashboard);
-  await store.patchTenant(tenantId, { briefing: analysis.briefing });
+  await store.patchTenant(tenantId, { briefing: analysis.briefing, topics: analysis.topics });
 }
 
 export function classifyKind(collection: CollectionProfile) {

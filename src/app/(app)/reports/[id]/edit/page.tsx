@@ -18,5 +18,12 @@ export default async function EditReportPage({ params }: PageProps<"/reports/[id
   const tenant = await getCurrentTenant();
   const [report, catalogs] = await Promise.all([store.getReport(id), loadCatalogs(tenant?.id)]);
   if (!report || !tenant || report.tenantId !== tenant.id) notFound();
-  return <Studio catalogs={catalogs} report={report} />;
+  return (
+    <Studio
+      catalogs={catalogs}
+      report={report}
+      industry={tenant.industry}
+      topicSummaries={tenant.topics}
+    />
+  );
 }

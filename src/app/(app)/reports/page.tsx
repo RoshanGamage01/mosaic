@@ -34,9 +34,9 @@ export default async function ReportsPage() {
   return (
     <PageBody className="space-y-6">
       <PageHeader
-        eyebrow="Reports"
+        eyebrow="Questions"
         title="Questions this company has saved"
-        description="Each report is one question. Open it, change the split, or pin it on a board."
+        description="Each one is something someone asked Mosaic. Open it, change the split, or pin it on a board."
         actions={
           <Button render={<Link href="/reports/new" />} className="rounded-xl">
             <Plus className="size-4" />

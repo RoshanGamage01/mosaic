@@ -25,11 +25,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/lib/client";
-import { classifyCollection, processMeta } from "@/lib/agent/concepts";
 import { defaultAggregation } from "@/lib/agent/measures";
 import { shortLabel } from "@/lib/agent/naming";
+import { topicsFromCatalog, type Topic } from "@/lib/agent/topics";
 import { reportWarnings } from "@/lib/query/warnings";
-import type { CollectionProfile, FieldProfile, Report, ReportSpec, Visual } from "@/lib/types";
+import type { CollectionProfile, Industry, Report, ReportSpec, Tenant, Visual } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const OPTIONS = {
@@ -41,21 +41,6 @@ const OPTIONS = {
 };
 
 const SIMPLE_VISUALS: Visual[] = ["kpi", "column", "bar", "line", "area", "donut", "table"];
-
-function firstCollection(catalogs: SourceCatalog[]) {
-  const ranked: { sourceId: string; collection: CollectionProfile; rank: number }[] = [];
-  for (const entry of catalogs) {
-    for (const collection of entry.catalog.collections) {
-      if (collection.hidden || collection.fields.length === 0) continue;
-      const process = classifyCollection(collection);
-      const rank =
-        process === "web" || process === "other" ? 3 : process === "service" ? 2 : process === "customers" ? 1 : 0;
-      ranked.push({ sourceId: entry.sourceId, collection, rank });
-    }
-  }
-  ranked.sort((a, b) => a.rank - b.rank || b.collection.documentCount - a.collection.documentCount);
-  return ranked[0] ?? null;
-}
 
 function findCollection(catalogs: SourceCatalog[], sourceId: string, name: string) {
   return catalogs
@@ -90,32 +75,34 @@ function reconcileVisual(spec: ReportSpec): Visual {
   return preferred.find((visual) => !unavailableReason(visual, spec)) ?? "table";
 }
 
-function usefulFields(collection: CollectionProfile) {
-  return collection.fields.filter(
-    (field) =>
-      !field.hidden &&
-      !field.inArray &&
-      (field.role === "measure" || field.role === "category" || field.role === "date" || field.role === "boolean"),
-  );
-}
-
 export function Studio({
   catalogs,
   report,
   initialSpec,
   initialName,
+  industry = "both",
+  topicSummaries,
 }: {
   catalogs: SourceCatalog[];
   report?: Report;
   initialSpec?: Partial<ReportSpec>;
   initialName?: string;
+  industry?: Industry;
+  topicSummaries?: Tenant["topics"];
 }) {
   const router = useRouter();
+  const topics = useMemo(() => {
+    const summaries = topicSummaries?.map((item) => ({ key: item.key, summary: item.summary }));
+    return catalogs.flatMap((entry) => topicsFromCatalog(entry.sourceId, entry.catalog, industry, summaries));
+  }, [catalogs, industry, topicSummaries]);
+
   const [draft, setDraft] = useState<ReportSpec | null>(() => {
     if (report) return report.spec;
-    const first = firstCollection(catalogs);
+    const first = topics[0];
     if (!first) return null;
-    const base = emptySpec(first.sourceId, first.collection);
+    const collection = findCollection(catalogs, first.sourceId, first.collection);
+    if (!collection) return null;
+    const base = emptySpec(first.sourceId, collection);
     return initialSpec ? ({ ...base, ...initialSpec } as ReportSpec) : base;
   });
   const [name, setName] = useState(report?.name ?? initialName ?? "Untitled");
@@ -124,6 +111,8 @@ export function Studio({
 
   const spec = useMemo(() => (draft ? { ...draft, visual: reconcileVisual(draft) } : null), [draft]);
   const collection = spec ? findCollection(catalogs, spec.sourceId, spec.collection) : undefined;
+  const topic = topics.find((item) => item.sourceId === spec?.sourceId && item.collection === spec?.collection) ??
+    topics.find((item) => item.collection === spec?.collection);
   const { result, error, loading } = useReportData(spec);
   const warnings = collection && spec ? reportWarnings(collection, spec) : [];
 
@@ -131,29 +120,43 @@ export function Studio({
     setDraft({ ...next, visual: reconcileVisual(next) });
   }
 
-  function selectCollection(sourceId: string, next: CollectionProfile) {
-    apply(emptySpec(sourceId, next));
+  function selectTopic(next: Topic) {
+    const found = findCollection(catalogs, next.sourceId, next.collection);
+    if (!found) return;
+    apply(emptySpec(next.sourceId, found));
     if (!report) setName(next.label);
   }
 
-  function selectField(field: FieldProfile) {
+  function pickNumber(path?: string) {
     if (!spec || !collection) return;
-    if (field.role === "measure") {
-      apply({ ...spec, metrics: [buildMetric(collection, defaultAggregation(field), field)] });
+    if (!path) {
+      apply({ ...spec, metrics: [buildMetric(collection, "count")], visual: spec.groupBy.length ? spec.visual : "kpi" });
       return;
     }
-    if (field.role === "date") {
-      apply({
-        ...spec,
-        groupBy: [{ id: "g1", field: field.path, label: shortLabel(field.label), grain: "month" }],
-        visual: "area",
-      });
+    const field = collection.fields.find((item) => item.path === path);
+    if (field) apply({ ...spec, metrics: [buildMetric(collection, defaultAggregation(field), field)] });
+  }
+
+  function pickSplit(path: string | "none", date?: boolean) {
+    if (!spec || !collection) return;
+    if (path === "none") {
+      apply({ ...spec, groupBy: [], visual: "kpi" });
       return;
     }
+    const field = collection.fields.find((item) => item.path === path);
+    if (!field) return;
     apply({
       ...spec,
-      groupBy: [{ id: "g1", field: field.path, label: shortLabel(field.label), limit: 12 }],
-      visual: spec.visual === "kpi" ? "column" : spec.visual,
+      groupBy: [
+        {
+          id: "g1",
+          field: field.path,
+          label: date ? "Month" : shortLabel(field.label),
+          grain: date || field.role === "date" ? "month" : undefined,
+          limit: date || field.role === "date" ? undefined : 12,
+        },
+      ],
+      visual: date || field.role === "date" ? "area" : spec.visual === "kpi" ? "column" : spec.visual,
     });
   }
 
@@ -178,7 +181,7 @@ export function Studio({
     }
   }
 
-  if (!spec || catalogs.length === 0) {
+  if (!spec || catalogs.length === 0 || topics.length === 0) {
     return (
       <div className="mx-auto max-w-lg px-5 py-16 text-center">
         <p className="text-lg font-semibold">Connect a database first</p>
@@ -191,11 +194,6 @@ export function Studio({
       </div>
     );
   }
-
-  const measures = collection ? usefulFields(collection).filter((field) => field.role === "measure") : [];
-  const splits = collection
-    ? usefulFields(collection).filter((field) => field.role === "category" || field.role === "date" || field.role === "boolean")
-    : [];
 
   return (
     <div className="flex min-h-[calc(100dvh-3.5rem)] flex-col lg:min-h-dvh">
@@ -219,6 +217,7 @@ export function Studio({
 
       <div className="border-b border-border/70 px-4 py-4 sm:px-6">
         <AskBar
+          variant="hero"
           onAnswer={(hit) => {
             apply(hit.spec);
             setName(hit.title);
@@ -226,175 +225,136 @@ export function Studio({
         />
       </div>
 
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[240px_minmax(0,1fr)]">
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="hidden overflow-y-auto border-r border-border/70 p-3 lg:block">
-          <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Look at
+          <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            This operation
           </p>
-          {catalogs.map((entry) => (
-            <div key={entry.sourceId} className="mb-3">
-              {entry.catalog.collections
-                .filter((item) => !item.hidden)
-                .map((item) => {
-                  const active = spec.collection === item.name && spec.sourceId === entry.sourceId;
-                  const process = classifyCollection(item);
-                  return (
-                    <div key={item.name} className="mb-1">
-                      <button
-                        type="button"
-                        onClick={() => selectCollection(entry.sourceId, item)}
-                        className={cn(
-                          "flex w-full flex-col rounded-lg px-2 py-1.5 text-left",
-                          active ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted/70",
-                        )}
-                      >
-                        <span className="text-sm font-medium">{item.label}</span>
-                        <span className="text-[10px] uppercase tracking-wide opacity-60">
-                          {processMeta[process].label}
-                        </span>
-                      </button>
-                      {active
-                        ? usefulFields(item).slice(0, 16).map((field) => (
-                            <button
-                              key={field.path}
-                              type="button"
-                              onClick={() => selectField(field)}
-                              className="flex w-full items-center justify-between rounded-lg px-2 py-1 pl-4 text-left text-xs text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-                            >
-                              <span className="truncate">{shortLabel(field.label)}</span>
-                              <span className="ml-2 shrink-0 text-[10px] uppercase tracking-wide opacity-60">
-                                {field.role === "measure" ? "#" : field.role === "date" ? "date" : "split"}
-                              </span>
-                            </button>
-                          ))
-                        : null}
-                    </div>
-                  );
-                })}
-            </div>
-          ))}
+          <p className="px-2 pb-3 text-[11px] leading-relaxed text-muted-foreground">
+            Mosaic grouped the records into the parts of the business it recognised. Pick one, or ask above.
+          </p>
+          <div className="space-y-1">
+            {topics.map((item) => {
+              const active = spec.collection === item.collection && spec.sourceId === item.sourceId;
+              return (
+                <button
+                  key={`${item.sourceId}:${item.key}`}
+                  type="button"
+                  onClick={() => selectTopic(item)}
+                  className={cn(
+                    "flex w-full flex-col rounded-xl px-3 py-2.5 text-left transition-colors",
+                    active ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                  )}
+                >
+                  <span className="text-sm font-medium">{item.label}</span>
+                  <span className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed opacity-80">{item.summary}</span>
+                </button>
+              );
+            })}
+          </div>
         </aside>
 
         <section className="flex min-w-0 flex-col">
-          <div className="flex flex-wrap items-center gap-2 border-b border-border/70 px-4 py-3 sm:px-6">
-            <Select
-              value={`${spec.sourceId}:${spec.collection}`}
-              onValueChange={(value) => {
-                if (!value) return;
-                const [sourceId, ...rest] = value.split(":");
-                const next = findCollection(catalogs, sourceId, rest.join(":"));
-                if (next) selectCollection(sourceId, next);
-              }}
-            >
-              <SelectTrigger className="h-9 w-[180px] rounded-xl text-sm lg:hidden">
-                <SelectValue placeholder="Look at" />
-              </SelectTrigger>
-              <SelectContent>
-                {catalogs.flatMap((entry) =>
-                  entry.catalog.collections
-                    .filter((item) => !item.hidden)
-                    .map((item) => (
-                      <SelectItem key={`${entry.sourceId}:${item.name}`} value={`${entry.sourceId}:${item.name}`}>
-                        {item.label}
-                      </SelectItem>
-                    )),
-                )}
-              </SelectContent>
-            </Select>
+          <div className="space-y-3 border-b border-border/70 px-4 py-3 sm:px-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={topic ? `${topic.sourceId}:${topic.collection}` : `${spec.sourceId}:${spec.collection}`}
+                onValueChange={(value) => {
+                  if (!value) return;
+                  const next = topics.find((item) => `${item.sourceId}:${item.collection}` === value);
+                  if (next) selectTopic(next);
+                }}
+              >
+                <SelectTrigger className="h-9 w-[200px] rounded-xl text-sm">
+                  <SelectValue placeholder="This part of the business" />
+                </SelectTrigger>
+                <SelectContent>
+                  {topics.map((item) => (
+                    <SelectItem key={`${item.sourceId}:${item.key}`} value={`${item.sourceId}:${item.collection}`}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-            <Select
-              value={spec.metrics[0]?.field ? `field:${spec.metrics[0].field}` : "count"}
-              onValueChange={(value) => {
-                if (!value || !collection) return;
-                if (value === "count") {
-                  apply({ ...spec, metrics: [buildMetric(collection, "count")] });
-                  return;
-                }
-                const path = value.replace(/^field:/, "");
-                const field = collection.fields.find((item) => item.path === path);
-                if (field) apply({ ...spec, metrics: [buildMetric(collection, defaultAggregation(field), field)] });
-              }}
-            >
-              <SelectTrigger className="h-9 w-[200px] rounded-xl text-sm">
-                <SelectValue placeholder="The number" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="count">Number of {collection?.label.toLowerCase()}</SelectItem>
-                {measures.map((field) => (
-                  <SelectItem key={field.path} value={`field:${field.path}`}>
-                    {shortLabel(field.label)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={spec.groupBy[0]?.field ?? "none"}
-              onValueChange={(value) => {
-                if (!value || !collection) return;
-                if (value === "none") {
-                  apply({ ...spec, groupBy: [], visual: "kpi" });
-                  return;
-                }
-                const field = collection.fields.find((item) => item.path === value);
-                if (!field) return;
-                apply({
-                  ...spec,
-                  groupBy: [
-                    {
-                      id: "g1",
-                      field: field.path,
-                      label: shortLabel(field.label),
-                      grain: field.role === "date" ? "month" : undefined,
-                      limit: field.role === "date" ? undefined : 12,
-                    },
-                  ],
-                });
-              }}
-            >
-              <SelectTrigger className="h-9 w-[180px] rounded-xl text-sm">
-                <SelectValue placeholder="Split by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No split — one number</SelectItem>
-                {splits.map((field) => (
-                  <SelectItem key={field.path} value={field.path}>
-                    {shortLabel(field.label)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <VisualPicker
-              spec={spec}
-              onChange={(visual) => apply({ ...spec, visual })}
-              allowed={SIMPLE_VISUALS}
-            />
-
-            {collection ? (
-              <Popover>
-                <PopoverTrigger
-                  render={
-                    <Button variant="outline" size="sm" className="ml-auto rounded-xl" />
+              <Select
+                value={spec.metrics[0]?.field ? `field:${spec.metrics[0].field}` : "count"}
+                onValueChange={(value) => {
+                  if (!value) return;
+                  if (value === "count") {
+                    pickNumber();
+                    return;
                   }
-                >
-                  <Filter className="size-4" />
-                  {spec.filters.length > 0 ? `${spec.filters.length} filter${spec.filters.length === 1 ? "" : "s"}` : "Filter"}
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-[360px] p-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    Only include records where
-                  </p>
-                  <FilterEditor
-                    sourceId={spec.sourceId}
-                    collection={collection}
-                    filters={spec.filters}
-                    match={spec.filterMatch}
-                    onChange={(filters) => apply({ ...spec, filters })}
-                    onMatchChange={(filterMatch) => apply({ ...spec, filterMatch })}
-                  />
-                </PopoverContent>
-              </Popover>
+                  pickNumber(value.replace(/^field:/, ""));
+                }}
+              >
+                <SelectTrigger className="h-9 w-[200px] rounded-xl text-sm">
+                  <SelectValue placeholder="The number" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(topic?.numbers ?? [{ label: "Count" }]).map((item) => (
+                    <SelectItem key={item.path ?? "count"} value={item.path ? `field:${item.path}` : "count"}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={spec.groupBy[0]?.field ?? "none"}
+                onValueChange={(value) => {
+                  if (!value) return;
+                  const split = topic?.splits.find((item) => item.path === value);
+                  pickSplit(value as "none", split?.date);
+                }}
+              >
+                <SelectTrigger className="h-9 w-[180px] rounded-xl text-sm">
+                  <SelectValue placeholder="Split by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No split — one number</SelectItem>
+                  {(topic?.splits ?? []).map((item) => (
+                    <SelectItem key={item.path} value={item.path}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <VisualPicker
+                spec={spec}
+                onChange={(visual) => apply({ ...spec, visual })}
+                allowed={SIMPLE_VISUALS}
+              />
+
+              {collection ? (
+                <Popover>
+                  <PopoverTrigger
+                    render={
+                      <Button variant="outline" size="sm" className="ml-auto rounded-xl" />
+                    }
+                  >
+                    <Filter className="size-4" />
+                    {spec.filters.length > 0 ? `${spec.filters.length} filter${spec.filters.length === 1 ? "" : "s"}` : "Filter"}
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-[360px] p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      Only include records where
+                    </p>
+                    <FilterEditor
+                      sourceId={spec.sourceId}
+                      collection={collection}
+                      filters={spec.filters}
+                      match={spec.filterMatch}
+                      onChange={(filters) => apply({ ...spec, filters })}
+                      onMatchChange={(filterMatch) => apply({ ...spec, filterMatch })}
+                    />
+                  </PopoverContent>
+                </Popover>
+              ) : null}
+            </div>
+            {topic ? (
+              <p className="text-xs text-muted-foreground">{topic.summary}</p>
             ) : null}
           </div>
 

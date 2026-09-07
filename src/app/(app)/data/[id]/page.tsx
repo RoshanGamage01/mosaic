@@ -39,8 +39,11 @@ export default async function DataSourcePage({ params }: PageProps<"/data/[id]">
         </Button>
         <h1 className="text-2xl font-semibold tracking-tight">{source.name}</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Mosaic reads the <span className="font-medium text-foreground">{source.database}</span>{" "}
-          database. Rename a field here and every report for this company uses the new name.
+          This is the technical map Mosaic used behind the scenes. Day-to-day users work from{" "}
+          <Link href="/data" className="underline-offset-2 hover:underline">
+            what Mosaic read
+          </Link>
+          , not from collection names.
         </p>
       </div>
 

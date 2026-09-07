@@ -1,16 +1,17 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Boxes, Database, Table2 } from "lucide-react";
+import { AlertTriangle, Database } from "lucide-react";
 
 import { ConnectWizard } from "@/components/data/connect-wizard";
 import { EmptyState } from "@/components/empty-state";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { formatCompact, formatRelative } from "@/lib/format";
+import { topicsFromCatalog } from "@/lib/agent/topics";
 import { store } from "@/lib/store";
 import { getCurrentTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Your data" };
+export const metadata = { title: "What Mosaic read" };
 
 export default async function DataPage({ searchParams }: PageProps<"/data">) {
   const params = await searchParams;
@@ -18,85 +19,99 @@ export default async function DataPage({ searchParams }: PageProps<"/data">) {
   if (!tenant) return null;
   const sources = await store.listSources(tenant.id);
   const catalogs = await Promise.all(sources.map((source) => store.getCatalog(source.id)));
+  const topics =
+    tenant.topics && tenant.topics.length > 0
+      ? tenant.topics
+      : sources.flatMap((source, index) => {
+          const catalog = catalogs[index];
+          if (!catalog) return [];
+          return topicsFromCatalog(source.id, catalog, tenant.industry);
+        });
 
   return (
     <PageBody className="space-y-6">
       <PageHeader
-        eyebrow="Database"
-        title="The database this company reports on"
-        description="Mosaic reads it, names the records in plain language, and keeps your corrections."
+        eyebrow="What Mosaic read"
+        title="How this company looks to Mosaic"
+        description="Mosaic read the database and grouped it into the parts of the operation a plant or sales lead would recognise. Collection names stay in the background."
         actions={<ConnectWizard autoOpen={params.connect === "1"} />}
       />
 
       {sources.length === 0 ? (
         <EmptyState
           icon={Database}
-          title="No databases connected yet"
-          description="Paste a MongoDB connection link and Mosaic will work out the rest: what data sets exist, what each field holds, and how they link together."
+          title="No database connected yet"
+          description="Paste a MongoDB connection link. Mosaic only reads it, then explains the business in plain language."
           action={<ConnectWizard autoOpen={params.connect === "1"} />}
         />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {sources.map((source, index) => {
-            const catalog = catalogs[index];
-            const collections = catalog?.collections ?? [];
-            const fields = collections.reduce((sum, item) => sum + item.fields.length, 0);
-            const records = collections.reduce((sum, item) => sum + item.documentCount, 0);
-            const links = collections.reduce((sum, item) => sum + item.relationships.length, 0);
-
-            return (
-              <Link
-                key={source.id}
-                href={`/data/${source.id}`}
-                className="surface surface-hover group flex flex-col gap-4 p-5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
-                      <Database className="size-[18px]" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold">{source.name}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {source.database}
-                        {source.lastScanAt ? ` · scanned ${formatRelative(source.lastScanAt)}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                  <StatusBadge status={source.status} />
-                </div>
-
-                {source.status === "error" ? (
-                  <p className="flex items-start gap-2 rounded-xl bg-destructive/5 p-3 text-xs text-destructive">
-                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                    {source.error}
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-3 gap-3">
-                    <Metric icon={Boxes} value={String(collections.length)} label="data sets" />
-                    <Metric icon={Table2} value={String(fields)} label="details" />
-                    <Metric icon={Database} value={formatCompact(records)} label="records" />
-                  </div>
-                )}
-
-                <p className="mt-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-                  {links > 0 ? `${links} link${links === 1 ? "" : "s"} between data sets` : "No links found"}
-                  <ArrowRight className="ml-auto size-4 opacity-0 transition-opacity group-hover:opacity-100" />
+        <div className="space-y-6">
+          {sources.map((source) => (
+            <div key={source.id} className="surface flex flex-wrap items-center justify-between gap-3 p-4">
+              <div>
+                <p className="text-sm font-medium">Connected as {source.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  Database {source.database}
+                  {source.lastScanAt ? ` · read ${formatRelative(source.lastScanAt)}` : ""}
                 </p>
-              </Link>
-            );
-          })}
+              </div>
+              <div className="flex items-center gap-2">
+                <StatusBadge status={source.status} />
+                <Link href={`/data/${source.id}`} className="text-xs text-muted-foreground hover:text-foreground">
+                  Technical map
+                </Link>
+              </div>
+            </div>
+          ))}
+
+          {sourceError(sources)}
+
+          {topics.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {topics.map((topic) => (
+                <Link
+                  key={topic.key}
+                  href="/reports/new"
+                  className="surface surface-hover flex flex-col gap-2 p-5"
+                >
+                  <p className="font-semibold">{topic.label}</p>
+                  <p className="text-sm leading-relaxed text-muted-foreground">{topic.summary}</p>
+                  {typeof topic.records === "number" ? (
+                    <p className="mt-auto pt-1 text-xs text-muted-foreground">
+                      {formatCompact(topic.records)} records Mosaic used
+                    </p>
+                  ) : null}
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Mosaic has not yet matched this database to sales or plant processes. Ask a question anyway —
+              it will still try.
+            </p>
+          )}
         </div>
       )}
     </PageBody>
   );
 }
 
+function sourceError(sources: { status: string; error?: string }[]) {
+  const broken = sources.find((source) => source.status === "error");
+  if (!broken?.error) return null;
+  return (
+    <p className="flex items-start gap-2 rounded-xl bg-destructive/5 p-3 text-sm text-destructive">
+      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+      {broken.error}
+    </p>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; className: string }> = {
     ready: { label: "Ready", className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
-    scanning: { label: "Scanning", className: "bg-sky-500/10 text-sky-700 dark:text-sky-300" },
-    pending: { label: "Not scanned", className: "bg-amber-500/10 text-amber-700 dark:text-amber-300" },
+    scanning: { label: "Reading", className: "bg-sky-500/10 text-sky-700 dark:text-sky-300" },
+    pending: { label: "Not read yet", className: "bg-amber-500/10 text-amber-700 dark:text-amber-300" },
     error: { label: "Needs attention", className: "bg-destructive/10 text-destructive" },
   };
   const meta = map[status] ?? map.pending;
@@ -104,23 +119,5 @@ function StatusBadge({ status }: { status: string }) {
     <Badge variant="secondary" className={`shrink-0 rounded-md ${meta.className}`}>
       {meta.label}
     </Badge>
-  );
-}
-
-function Metric({
-  icon: Icon,
-  value,
-  label,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  value: string;
-  label: string;
-}) {
-  return (
-    <div className="rounded-xl bg-muted/50 p-3">
-      <Icon className="mb-1.5 size-3.5 text-muted-foreground" />
-      <p className="text-lg font-semibold leading-none tabular-nums">{value}</p>
-      <p className="mt-1 text-[11px] text-muted-foreground">{label}</p>
-    </div>
   );
 }

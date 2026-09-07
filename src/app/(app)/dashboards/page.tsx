@@ -21,7 +21,7 @@ export default async function DashboardsPage() {
       <PageHeader
         eyebrow="Boards"
         title="Morning boards"
-        description="Sales and plant numbers, side by side, with one time range for all of them."
+        description="Open a board to see this morning's numbers. Click any tile to ask a follow-up."
         actions={<CreateDashboard />}
       />
 

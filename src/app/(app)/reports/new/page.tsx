@@ -8,5 +8,11 @@ export const metadata = { title: "New report" };
 export default async function NewReportPage() {
   const tenant = await getCurrentTenant();
   const catalogs = await loadCatalogs(tenant?.id);
-  return <NewReportBuilder catalogs={catalogs} />;
+  return (
+    <NewReportBuilder
+      catalogs={catalogs}
+      industry={tenant?.industry ?? "both"}
+      topicSummaries={tenant?.topics}
+    />
+  );
 }

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   ArrowLeft,
-  CalendarRange,
   Check,
   LayoutGrid,
   Loader2,
@@ -27,25 +26,15 @@ import {
 } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { api } from "@/lib/client";
 import { localId } from "@/lib/ids";
 import type { Dashboard, RelativeUnit, Report, Tile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const RANGES: { key: string; label: string; amount?: number; unit?: RelativeUnit }[] = [
-  { key: "all", label: "All time" },
-  { key: "7d", label: "Last 7 days", amount: 7, unit: "days" },
   { key: "30d", label: "Last 30 days", amount: 30, unit: "days" },
-  { key: "90d", label: "Last 90 days", amount: 90, unit: "days" },
   { key: "12m", label: "Last 12 months", amount: 12, unit: "months" },
-  { key: "24m", label: "Last 2 years", amount: 24, unit: "months" },
+  { key: "all", label: "All time" },
 ];
 
 const COL_SPAN: Record<number, string> = {
@@ -146,32 +135,31 @@ export function DashboardView({
                 <h1 className="text-2xl font-semibold tracking-tight text-balance">{dashboard.name}</h1>
               )}
             </div>
-            {dashboard.description ? (
+            {dashboard.description && !embedded ? (
               <p className="max-w-2xl text-sm text-muted-foreground">{dashboard.description}</p>
             ) : null}
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={range.key}
-            onValueChange={(key) => {
-              const next = RANGES.find((item) => item.key === key)!;
-              persist({ timeRange: { preset: next.key, amount: next.amount, unit: next.unit } });
-            }}
-          >
-            <SelectTrigger className="h-9 w-44 rounded-xl text-sm">
-              <CalendarRange className="size-4 text-muted-foreground" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {RANGES.map((item) => (
-                <SelectItem key={item.key} value={item.key}>
+        <div className={cn("flex flex-wrap items-center gap-2", embedded && "mb-1 w-full justify-between")}>
+          <div className="flex flex-wrap gap-1.5 rounded-2xl bg-muted/70 p-1">
+            {RANGES.map((item) => {
+              const active = range.key === item.key;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => persist({ timeRange: { preset: item.key, amount: item.amount, unit: item.unit } })}
+                  className={cn(
+                    "rounded-xl px-3 py-1.5 text-xs font-medium transition-colors",
+                    active ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
                   {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                </button>
+              );
+            })}
+          </div>
 
           {embedded ? null : (
             <>
@@ -201,7 +189,7 @@ export function DashboardView({
                 ) : (
                   <Pencil className="size-4" />
                 )}
-                {editing ? "Done" : "Arrange"}
+                {editing ? "Done" : "Move tiles"}
               </Button>
             </>
           )}
@@ -223,8 +211,8 @@ export function DashboardView({
       {dashboard.tiles.length === 0 ? (
         <EmptyState
           icon={LayoutGrid}
-          title="This dashboard is empty"
-          description="Add a report you have already built, or create a new one and drop it here."
+          title="This board is empty"
+          description="Pin a question you have already asked, or ask a new one."
           action={
             <div className="flex gap-2">
               <AddTile
@@ -286,7 +274,7 @@ function AddTile({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={<Button variant="outline" size="sm" className="rounded-xl" />}>
         <Plus className="size-4" />
-        Add a report
+        Add a question
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-0">
         <Command filter={(value, search) => (value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0)}>

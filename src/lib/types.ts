@@ -19,6 +19,17 @@ export const tenantSchema = z.object({
   createdAt: z.string(),
   /** Plain-language briefing written after the last scan. */
   briefing: z.string().optional(),
+  /** Business topics Mosaic inferred — operators see these, not collections. */
+  topics: z
+    .array(
+      z.object({
+        key: z.string(),
+        label: z.string(),
+        summary: z.string(),
+        records: z.number().optional(),
+      }),
+    )
+    .optional(),
 });
 export type Tenant = z.infer<typeof tenantSchema>;
 

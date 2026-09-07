@@ -103,7 +103,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
           </p>
           <Button render={<Link href="/reports/new" />} className="rounded-xl">
             <Plus className="size-4" />
-            New report
+            Ask Mosaic
           </Button>
         </div>
       )}

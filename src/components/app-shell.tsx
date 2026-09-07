@@ -8,7 +8,6 @@ import {
   LayoutGrid,
   Menu,
   PieChart,
-  Plus,
   Sparkles,
 } from "lucide-react";
 
@@ -22,8 +21,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/", label: "Home", icon: Sparkles, exact: true },
   { href: "/dashboards", label: "Boards", icon: LayoutGrid },
-  { href: "/reports", label: "Reports", icon: PieChart },
-  { href: "/data", label: "Database", icon: Database },
+  { href: "/reports", label: "Questions", icon: PieChart },
 ];
 
 function isActive(pathname: string, href: string, exact?: boolean) {
@@ -90,8 +88,8 @@ function SidebarBody({
           className="justify-start gap-2 rounded-xl"
           size="lg"
         >
-          <Plus className="size-4" />
-          New report
+          <Sparkles className="size-4" />
+          Ask Mosaic
         </Button>
       ) : null}
 
@@ -118,6 +116,15 @@ function SidebarBody({
             ))}
           </div>
         ) : null}
+        <Button
+          render={<Link href="/data" onClick={onNavigate} />}
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start rounded-lg text-muted-foreground"
+        >
+          <Database className="size-3.5" />
+          Connection
+        </Button>
         <Button
           render={<Link href="/register" onClick={onNavigate} />}
           variant="ghost"
