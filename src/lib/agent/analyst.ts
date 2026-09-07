@@ -70,7 +70,7 @@ function pack(tiles: { reportId: string; width: number }[]): Tile[] {
 
 function playbookBriefing(tenant: Tenant, mapped: MappedCollection[]) {
   const found = mapped
-    .filter((item) => item.process !== "other" && item.process !== "web")
+    .filter((item) => item.process !== "other" && item.process !== "web" && item.process !== "service")
     .map((item) => processMeta[item.process].label);
   const unique = [...new Set(found)];
   const who =
