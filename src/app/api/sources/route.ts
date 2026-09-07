@@ -1,0 +1,74 @@
+import { z } from "zod";
+
+import { fail, handleError, newId, ok } from "@/lib/api";
+import { inspectServer } from "@/lib/agent/register";
+import { store } from "@/lib/store";
+import type { DataSource } from "@/lib/types";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+/** The connection link is a secret; it never leaves the server. */
+function redact(source: DataSource) {
+  const { uri, ...rest } = source;
+  let host = "";
+  try {
+    host = new URL(uri.replace("mongodb+srv://", "https://").replace("mongodb://", "http://")).host;
+  } catch {
+    host = "unknown host";
+  }
+  return { ...rest, host };
+}
+
+export async function GET() {
+  try {
+    const sources = await store.listSources();
+    const catalogs = await Promise.all(sources.map((s) => store.getCatalog(s.id)));
+    return ok(
+      sources.map((source, index) => ({
+        ...redact(source),
+        collectionCount: catalogs[index]?.collections.length ?? 0,
+        fieldCount:
+          catalogs[index]?.collections.reduce((sum, c) => sum + c.fields.length, 0) ?? 0,
+        documentCount:
+          catalogs[index]?.collections.reduce((sum, c) => sum + c.documentCount, 0) ?? 0,
+      })),
+    );
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
+const createSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  uri: z.string().trim().min(1),
+  database: z.string().trim().min(1),
+  sampleSize: z.number().int().min(50).max(5000).optional(),
+});
+
+export async function POST(request: Request) {
+  try {
+    const body = createSchema.parse(await request.json());
+    const existing = await store.listSources();
+    if (existing.some((s) => s.uri === body.uri && s.database === body.database)) {
+      return fail("That database is already connected.", 409);
+    }
+
+    // Fail fast with a friendly message rather than storing a broken source.
+    await inspectServer(body.uri);
+
+    const source: DataSource = {
+      id: newId("src"),
+      name: body.name?.trim() || body.database,
+      uri: body.uri,
+      database: body.database,
+      status: "pending",
+      sampleSize: body.sampleSize ?? 400,
+      createdAt: new Date().toISOString(),
+    };
+    await store.upsertSource(source);
+    return ok(redact(source), { status: 201 });
+  } catch (error) {
+    return handleError(error);
+  }
+}
