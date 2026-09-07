@@ -313,7 +313,11 @@ async function profileCollection(
     primaryDateField: pickPrimaryDate(
       fields
         .filter((f) => f.role === "date" && !f.hidden)
-        .map((f) => ({ path: f.path, leaf: f.path.split(".").pop() ?? f.path })),
+        .map((f) => ({
+          path: f.path,
+          leaf: f.path.split(".").pop() ?? f.path,
+          presence: f.presence,
+        })),
     ),
     primaryMeasureField: pickPrimaryMeasure(
       fields

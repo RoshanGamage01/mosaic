@@ -33,6 +33,10 @@ export type FieldStats = {
 const CURRENCY_HINTS =
   /(price|amount|amt|total|revenue|cost|salary|fee|charge|balance|payment|paid|subtotal|discount|refund|profit|margin|value|spend|budget|income|expense|wage|payout|due|owed|net|gross|mrr|arr)/i;
 
+/** A trailing ISO currency code, as in `billed_amount_lkr` or `netUSD`. */
+const CURRENCY_CODE_HINTS =
+  /(^|_)(usd|eur|gbp|lkr|inr|aud|cad|jpy|chf|sgd|aed|zar|nzd|sek|nok|dkk|brl|mxn)$/i;
+
 const PERCENT_HINTS = /(percent|percentage|pct|rate|ratio|share|utilisation|utilization)$/i;
 
 const DURATION_HINTS = /(duration|elapsed|seconds|minutes|hours|ms|latency)/i;
@@ -115,7 +119,7 @@ export function classifyField(stats: FieldStats): {
       return { role: "date", format: "datetime", hidden };
     }
     let format: FieldFormat = "number";
-    if (CURRENCY_HINTS.test(name)) format = "currency";
+    if (CURRENCY_HINTS.test(name) || CURRENCY_CODE_HINTS.test(name)) format = "currency";
     else if (PERCENT_HINTS.test(name)) format = "percent";
     else if (stats.integerCount === stats.numericCount && !DURATION_HINTS.test(name))
       format = "integer";
@@ -190,20 +194,42 @@ export function fieldInterest(
   return score;
 }
 
-/** Picks the date field a time filter should default to. */
-export function pickPrimaryDate(candidates: { path: string; leaf: string }[]): string | undefined {
+/** When a record began — the date a time filter should follow. */
+const STARTED_HINTS =
+  /(created|opened|started|admitted|registered|signup|signed_?up|joined|placed|order_?date|ordered|purchase|transaction|invoice_?date|issued|received|booked|submitted|launched|logged|occurred|recorded|entered|posted)/i;
+
+/** When it finished. Usually blank on anything still in flight. */
+const ENDED_HINTS =
+  /(updated|modified|discharged|resolved|closed|completed|finished|ended|shipped|delivered|cancelled|canceled|returned|refunded|archived|deleted|last_)/i;
+
+/** Dates that describe the record rather than place it in time. */
+const ATTRIBUTE_DATES =
+  /(^dob$|birth|expiry|expires|expiration|deadline|due_?date|valid_?until|valid_?from|renew)/i;
+
+const GENERIC_DATE = /^(date|timestamp|time|day)$/i;
+
+/**
+ * Picks the date a time filter should default to. Start dates beat end dates,
+ * which are often blank on records still in progress, and dates that merely
+ * describe a record — a date of birth, an expiry — are never the time axis.
+ */
+export function pickPrimaryDate(
+  candidates: { path: string; leaf: string; presence?: number }[],
+): string | undefined {
   if (candidates.length === 0) return undefined;
-  const priority = [
-    /^(created_?at|createdon|created)$/i,
-    /^(order_?date|orderedat|placed_?at|purchase_?date|transaction_?date|invoice_?date)$/i,
-    /^(date|timestamp|occurred_?at|event_?date|logged_?at)$/i,
-    /^(updated_?at|modified_?at)$/i,
-  ];
-  for (const pattern of priority) {
-    const match = candidates.find((c) => pattern.test(c.leaf));
-    if (match) return match.path;
-  }
-  return candidates[0].path;
+
+  const scored = candidates.map((candidate) => {
+    let score = (candidate.presence ?? 1) * 30;
+    if (STARTED_HINTS.test(candidate.leaf)) score += 40;
+    else if (GENERIC_DATE.test(candidate.leaf)) score += 25;
+    if (ENDED_HINTS.test(candidate.leaf)) score -= 30;
+    if (ATTRIBUTE_DATES.test(candidate.leaf)) score -= 100;
+    score -= candidate.path.split(".").length * 5;
+    return { path: candidate.path, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0].score > 0 ? scored[0].path : undefined;
 }
 
 const ADDITIVE_HINTS =
