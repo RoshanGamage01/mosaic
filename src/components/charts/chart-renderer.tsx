@@ -108,6 +108,19 @@ export function ChartRenderer({ result, spec, compact = false, height }: Props) 
       }))
       .filter((slice) => slice.value > 0);
 
+    // A pie can only draw positive slices, so a set of zeroes or negatives
+    // would otherwise render as an empty card with no explanation.
+    if (pieData.length === 0) {
+      return (
+        <div className="flex h-full min-h-40 flex-col items-center justify-center gap-1 text-center">
+          <p className="text-sm font-medium">Nothing to slice up</p>
+          <p className="max-w-xs text-xs text-muted-foreground">
+            Every group came back as zero or less. A bar chart shows this kind of number better.
+          </p>
+        </div>
+      );
+    }
+
     return (
       <ResponsiveContainer width="100%" height={chartHeight}>
         <PieChart>
