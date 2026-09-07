@@ -101,15 +101,17 @@ export function humanizeToken(token: string, options: { dropTrailingId?: boolean
   return words.map(titleCaseWord).join(" ");
 }
 
-/** Human label for a dotted document path. */
+/**
+ * Human label for a dotted document path. The `[]` marker on a list of plain
+ * values is internal bookkeeping — "Tags" is what a reader should see.
+ */
 export function humanizeFieldPath(path: string): string {
   if (path === "_id") return "Record ID";
-  const parts = path.split(".");
-  const labelled = parts.map((part, index) => {
-    const isLast = index === parts.length - 1;
-    return humanizeToken(part, { dropTrailingId: isLast && parts.length === 1 ? false : false });
-  });
-  return labelled.join(" › ");
+  return path
+    .replace(/\[\]$/, "")
+    .split(".")
+    .map((part) => humanizeToken(part))
+    .join(" › ");
 }
 
 const IRREGULAR_SINGULARS: Record<string, string> = {

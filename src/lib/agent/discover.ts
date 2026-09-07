@@ -363,11 +363,27 @@ async function detectRelationships(
         localField: field.path,
         foreignCollection: target.name,
         foreignField: "_id",
-        label: `Each ${profile.noun} belongs to one ${target.noun}`,
+        // A reference held inside a list points at many records, not one.
+        label: field.inArray
+          ? `Each ${profile.noun} lists one or more ${target.label.toLowerCase()}`
+          : `Each ${profile.noun} belongs to one ${target.noun}`,
         confidence: Number(confidence.toFixed(2)),
       } satisfies Relationship);
     }
   }
+}
+
+/**
+ * Reads every value at a dotted path, stepping through arrays on the way, so
+ * a reference that lives inside a list (`items.productId`) is found too.
+ */
+function pluck(value: unknown, keys: string[]): unknown[] {
+  if (value === null || value === undefined) return [];
+  if (keys.length === 0) return [value];
+  if (Array.isArray(value)) return value.flatMap((item) => pluck(item, keys));
+  if (typeof value !== "object") return [];
+  const [head, ...rest] = keys;
+  return pluck((value as Record<string, unknown>)[head], rest);
 }
 
 async function verifyLink(
@@ -379,12 +395,24 @@ async function verifyLink(
   try {
     const samples = await db
       .collection(collection)
-      .find({ [localField]: { $ne: null } }, { projection: { [localField]: 1 }, limit: 15, maxTimeMS: 5000 })
+      .find({ [localField]: { $ne: null } }, { projection: { [localField]: 1 }, limit: 25, maxTimeMS: 5000 })
       .toArray();
-    const values = samples
-      .map((doc) => localField.split(".").reduce<unknown>((acc, key) => (acc as Record<string, unknown>)?.[key], doc))
-      .filter((v) => v !== null && v !== undefined);
-    if (values.length === 0) return 0;
+
+    /**
+     * Many records point at the same parent — every order of one customer, for
+     * example — so the values have to be de-duplicated before they are
+     * compared. Counting matched parents against raw references would score a
+     * perfectly good link as a bad one.
+     */
+    const unique = new Map<string, unknown>();
+    for (const doc of samples) {
+      for (const value of pluck(doc, localField.split("."))) {
+        unique.set(stringify(value), value);
+      }
+    }
+    if (unique.size === 0) return 0;
+
+    const values = [...unique.values()];
     const matched = await db
       .collection(foreignCollection)
       .countDocuments({ _id: { $in: values } } as never, { limit: values.length, maxTimeMS: 5000 });
