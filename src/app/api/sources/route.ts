@@ -4,6 +4,7 @@ import { fail, handleError, newId, ok } from "@/lib/api";
 import { inspectServer } from "@/lib/agent/register";
 import { hostOf, withoutConnectionLink } from "@/lib/redact";
 import { store } from "@/lib/store";
+import { requireTenant } from "@/lib/tenant";
 import type { DataSource } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -15,7 +16,8 @@ function redact(source: DataSource) {
 
 export async function GET() {
   try {
-    const sources = await store.listSources();
+    const tenant = await requireTenant();
+    const sources = await store.listSources(tenant.id);
     const catalogs = await Promise.all(sources.map((s) => store.getCatalog(s.id)));
     return ok(
       sources.map((source, index) => ({
@@ -41,10 +43,11 @@ const createSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const tenant = await requireTenant();
     const body = createSchema.parse(await request.json());
-    const existing = await store.listSources();
+    const existing = await store.listSources(tenant.id);
     if (existing.some((s) => s.uri === body.uri && s.database === body.database)) {
-      return fail("That database is already connected.", 409);
+      return fail("That database is already connected for this company.", 409);
     }
 
     // Fail fast with a friendly message rather than storing a broken source.
@@ -52,6 +55,7 @@ export async function POST(request: Request) {
 
     const source: DataSource = {
       id: newId("src"),
+      tenantId: tenant.id,
       name: body.name?.trim() || body.database,
       uri: body.uri,
       database: body.database,

@@ -22,7 +22,7 @@ export type VisualMeta = {
 
 export const visualMeta: Record<Visual, VisualMeta> = {
   kpi: {
-    label: "Single number",
+    label: "Number",
     icon: Gauge,
     bestFor: "One headline figure, like total sales this month.",
     needsBreakdown: false,

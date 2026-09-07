@@ -29,13 +29,16 @@ function unavailableReason(visual: Visual, spec: ReportSpec): string | null {
 export function VisualPicker({
   spec,
   onChange,
+  allowed,
 }: {
   spec: ReportSpec;
   onChange: (visual: Visual) => void;
+  allowed?: Visual[];
 }) {
+  const options = allowed ?? visualOrder;
   return (
     <div className="flex flex-wrap items-center gap-1 rounded-xl bg-muted/70 p-1">
-      {visualOrder.map((visual) => {
+      {options.map((visual) => {
         const meta = visualMeta[visual];
         const reason = unavailableReason(visual, spec);
         const active = spec.visual === visual;

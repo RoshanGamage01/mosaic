@@ -4,14 +4,15 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { getDb } from "./agent/client";
-import type { Catalog, Dashboard, DataSource, Report } from "./types";
+import type { Catalog, Dashboard, DataSource, Report, Tenant } from "./types";
 
 /**
- * Everything the agent remembers between restarts. Kept in one JSON document so
- * an operator can read, back up or hand-edit it without extra tooling.
+ * Everything Mosaic remembers between restarts, scoped to customer tenants.
+ * Kept in one JSON document so an operator can read, back up or hand-edit it.
  */
 type Database = {
-  version: 1;
+  version: 2;
+  tenants: Tenant[];
   sources: DataSource[];
   catalogs: Record<string, Catalog>;
   reports: Report[];
@@ -20,7 +21,8 @@ type Database = {
 };
 
 const emptyDatabase = (): Database => ({
-  version: 1,
+  version: 2,
+  tenants: [],
   sources: [],
   catalogs: {},
   reports: [],
@@ -28,17 +30,37 @@ const emptyDatabase = (): Database => ({
   meta: {},
 });
 
+function migrate(raw: Partial<Database> & { version?: number }): Database {
+  const db: Database = { ...emptyDatabase(), ...raw, version: 2 };
+  db.tenants ??= [];
+  db.sources ??= [];
+  db.reports ??= [];
+  db.dashboards ??= [];
+  db.catalogs ??= {};
+  db.meta ??= {};
+
+  const orphaned =
+    db.tenants.length === 0 && (db.sources.length > 0 || db.reports.length > 0);
+  if (orphaned) {
+    const tenant: Tenant = {
+      id: "ten_migrated",
+      name: "My company",
+      industry: "both",
+      createdAt: new Date().toISOString(),
+    };
+    db.tenants.push(tenant);
+    for (const source of db.sources) source.tenantId ??= tenant.id;
+    for (const report of db.reports) report.tenantId ??= tenant.id;
+    for (const dashboard of db.dashboards) dashboard.tenantId ??= tenant.id;
+  }
+  return db;
+}
+
 const dataDir = process.env.MOSAIC_DATA_DIR
   ? path.resolve(process.env.MOSAIC_DATA_DIR)
   : path.join(process.cwd(), ".mosaic");
 const dataFile = path.join(dataDir, "workspace.json");
 
-/**
- * Where the workspace is kept. A JSON file is the friendliest default — you
- * can read it, copy it, and hand-edit it. But a container without a mounted
- * volume throws that file away on every restart, so an operator can point
- * Mosaic at a MongoDB database instead and get the same single document back.
- */
 type Backend = {
   read(): Promise<Database | null>;
   write(db: Database): Promise<void>;
@@ -52,15 +74,13 @@ function fileBackend(): Backend {
     description: dataFile,
     async read() {
       try {
-        return JSON.parse(await readFile(dataFile, "utf8")) as Database;
+        return migrate(JSON.parse(await readFile(dataFile, "utf8")));
       } catch {
         return null;
       }
     },
     async write(db) {
       await mkdir(dataDir, { recursive: true });
-      // Written beside the target and renamed, so a crash mid-write cannot
-      // leave a half-finished workspace behind.
       const tmp = `${dataFile}.${process.pid}.tmp`;
       await writeFile(tmp, JSON.stringify(db, null, 2), "utf8");
       await rename(tmp, dataFile);
@@ -78,7 +98,7 @@ function mongoBackend(uri: string, database: string): Backend {
       if (!doc) return null;
       const { _id, ...rest } = doc;
       void _id;
-      return rest as unknown as Database;
+      return migrate(rest as Partial<Database>);
     },
     async write(db) {
       const target = await getDb(uri, database);
@@ -99,15 +119,10 @@ type Cache = { loading: Promise<Database> | null; queue: Promise<unknown> };
 const globalCache = globalThis as unknown as { __mosaicStore?: Cache };
 const cache: Cache = (globalCache.__mosaicStore ??= { loading: null, queue: Promise.resolve() });
 
-/**
- * The in-flight read is cached, not just its result. Two concurrent callers on
- * a cold cache must end up with the same object, otherwise one of them writes
- * over a copy the other has already mutated.
- */
 function load(): Promise<Database> {
   cache.loading ??= backend
     .read()
-    .then((stored) => ({ ...emptyDatabase(), ...(stored ?? {}) }))
+    .then((stored) => stored ?? emptyDatabase())
     .catch(() => emptyDatabase());
   return cache.loading;
 }
@@ -116,7 +131,6 @@ async function persist(db: Database) {
   await backend.write(db);
 }
 
-/** Serialises writers so two concurrent requests cannot clobber each other. */
 function transact<T>(mutate: (db: Database) => T | Promise<T>): Promise<T> {
   const run = cache.queue.then(async () => {
     const db = await load();
@@ -128,15 +142,58 @@ function transact<T>(mutate: (db: Database) => T | Promise<T>): Promise<T> {
   return run;
 }
 
+function inTenant<T extends { tenantId?: string }>(rows: T[], tenantId?: string) {
+  if (!tenantId) return rows;
+  return rows.filter((row) => row.tenantId === tenantId);
+}
+
 export const store = {
   async snapshot(): Promise<Database> {
     return structuredClone(await load());
   },
 
+  /* ---------------- tenants ---------------- */
+
+  async listTenants(): Promise<Tenant[]> {
+    return structuredClone((await load()).tenants);
+  },
+  async getTenant(id: string): Promise<Tenant | undefined> {
+    const found = (await load()).tenants.find((tenant) => tenant.id === id);
+    return found ? structuredClone(found) : undefined;
+  },
+  async upsertTenant(tenant: Tenant): Promise<Tenant> {
+    return transact((db) => {
+      const index = db.tenants.findIndex((item) => item.id === tenant.id);
+      if (index === -1) db.tenants.push(tenant);
+      else db.tenants[index] = tenant;
+      return tenant;
+    });
+  },
+  async patchTenant(id: string, patch: Partial<Tenant>): Promise<Tenant | undefined> {
+    return transact((db) => {
+      const tenant = db.tenants.find((item) => item.id === id);
+      if (!tenant) return undefined;
+      Object.assign(tenant, patch);
+      return structuredClone(tenant);
+    });
+  },
+  async deleteTenant(id: string): Promise<void> {
+    await transact((db) => {
+      db.tenants = db.tenants.filter((tenant) => tenant.id !== id);
+      const sourceIds = new Set(
+        db.sources.filter((source) => source.tenantId === id).map((source) => source.id),
+      );
+      db.sources = db.sources.filter((source) => source.tenantId !== id);
+      for (const sourceId of sourceIds) delete db.catalogs[sourceId];
+      db.reports = db.reports.filter((report) => report.tenantId !== id);
+      db.dashboards = db.dashboards.filter((dashboard) => dashboard.tenantId !== id);
+    });
+  },
+
   /* ---------------- data sources ---------------- */
 
-  async listSources(): Promise<DataSource[]> {
-    return structuredClone((await load()).sources);
+  async listSources(tenantId?: string): Promise<DataSource[]> {
+    return structuredClone(inTenant((await load()).sources, tenantId));
   },
   async getSource(id: string): Promise<DataSource | undefined> {
     const found = (await load()).sources.find((s) => s.id === id);
@@ -186,8 +243,8 @@ export const store = {
 
   /* ---------------- reports ---------------- */
 
-  async listReports(): Promise<Report[]> {
-    return structuredClone((await load()).reports);
+  async listReports(tenantId?: string): Promise<Report[]> {
+    return structuredClone(inTenant((await load()).reports, tenantId));
   },
   async getReport(id: string): Promise<Report | undefined> {
     const found = (await load()).reports.find((r) => r.id === id);
@@ -212,8 +269,8 @@ export const store = {
 
   /* ---------------- dashboards ---------------- */
 
-  async listDashboards(): Promise<Dashboard[]> {
-    return structuredClone((await load()).dashboards);
+  async listDashboards(tenantId?: string): Promise<Dashboard[]> {
+    return structuredClone(inTenant((await load()).dashboards, tenantId));
   },
   async getDashboard(id: string): Promise<Dashboard | undefined> {
     const found = (await load()).dashboards.find((d) => d.id === id);

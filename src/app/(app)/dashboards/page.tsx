@@ -6,27 +6,30 @@ import { EmptyState } from "@/components/empty-state";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { formatRelative } from "@/lib/format";
 import { store } from "@/lib/store";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboards" };
 
 export default async function DashboardsPage() {
-  const dashboards = await store.listDashboards();
+  const tenant = await getCurrentTenant();
+  if (!tenant) return null;
+  const dashboards = await store.listDashboards(tenant.id);
 
   return (
     <PageBody className="space-y-6">
       <PageHeader
-        eyebrow="Dashboards"
-        title="The view your team opens every morning"
-        description="Put the reports that matter side by side, set one time range for all of them, and share the link."
+        eyebrow="Boards"
+        title="Morning boards"
+        description="Sales and plant numbers, side by side, with one time range for all of them."
         actions={<CreateDashboard />}
       />
 
       {dashboards.length === 0 ? (
         <EmptyState
           icon={LayoutGrid}
-          title="No dashboards yet"
-          description="A dashboard is a set of reports shown together. Create one and start adding tiles."
+          title="No boards yet"
+          description="Connect a database and Mosaic will open the boards this operation can actually answer."
           action={<CreateDashboard />}
         />
       ) : (

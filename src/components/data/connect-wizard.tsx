@@ -170,21 +170,21 @@ export function ConnectWizard({
         <DialogHeader>
           <DialogTitle>
             {step === "link"
-              ? "Connect a database"
+              ? "Connect this company's database"
               : step === "pick"
-                ? "Which database should Mosaic read?"
+                ? "Which database should we report on?"
                 : summary
-                  ? "Ready to explore"
-                  : "Getting to know your data"}
+                  ? "Your boards are ready"
+                  : "Reading the database"}
           </DialogTitle>
           <DialogDescription>
             {step === "link"
-              ? "Mosaic only ever reads. Paste the connection link your database gives you."
+              ? "Paste the connection link. Mosaic only reads — it never writes to the customer's database."
               : step === "pick"
-                ? `Connected to ${server?.host ?? "your server"}.`
+                ? `Connected to ${server?.host ?? "your server"}. Pick the database name this company uses.`
                 : summary
-                  ? "Everything below is editable — rename anything that does not read well."
-                  : "The agent is sampling your records to work out what each field holds."}
+                  ? "I mapped the records onto the questions a plant or sales lead would actually ask."
+                  : "Working out what each set of records is for — orders, pipeline, production, stock."}
           </DialogDescription>
         </DialogHeader>
 
@@ -286,7 +286,7 @@ export function ConnectWizard({
               </Button>
               <Button onClick={register} disabled={!database} className="flex-1 rounded-xl" size="lg">
                 <Sparkles className="size-4" />
-                Scan it
+                Read it and build the boards
               </Button>
             </div>
           </div>
@@ -301,29 +301,16 @@ export function ConnectWizard({
                   <Stat value={String(summary.fields)} label="details understood" />
                 </div>
                 <div className="flex flex-col gap-2">
-                  {summary.dashboard ? (
-                    <Button
-                      className="rounded-xl"
-                      size="lg"
-                      onClick={() => {
-                        setOpen(false);
-                        router.push(`/dashboards/${summary.dashboard}`);
-                      }}
-                    >
-                      Open the dashboard we built for you
-                      <ArrowRight className="size-4" />
-                    </Button>
-                  ) : null}
                   <Button
-                    variant={summary.dashboard ? "outline" : "default"}
                     className="rounded-xl"
                     size="lg"
                     onClick={() => {
                       setOpen(false);
-                      router.push("/data");
+                      router.push("/");
                     }}
                   >
-                    Review what it found
+                    Open this morning&apos;s boards
+                    <ArrowRight className="size-4" />
                   </Button>
                 </div>
               </div>

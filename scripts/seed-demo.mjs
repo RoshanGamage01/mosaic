@@ -273,15 +273,134 @@ async function main() {
   }
   await db.collection("web_sessions").insertMany(sessions);
 
+  /* ---------------- sales pipeline (Salesforce-style) ---------------- */
+  const STAGES = [
+    ["Prospecting", 22],
+    ["Qualification", 20],
+    ["Proposal", 18],
+    ["Negotiation", 12],
+    ["Closed Won", 16],
+    ["Closed Lost", 12],
+  ];
+  const opportunities = [];
+  for (let i = 0; i < 820; i += 1) {
+    const customer = pick(customers);
+    const stage = weighted(STAGES);
+    const closed = stage.startsWith("Closed");
+    const amount = round2(weighted([[2500, 30], [12000, 35], [45000, 22], [180000, 13]]) * between(0.7, 1.4));
+    const createdDays = intBetween(5, 500);
+    opportunities.push({
+      _id: new ObjectId(),
+      opportunityName: `${customer.companyName || customer.fullName} — ${pick(["Annual supply", "Plant upgrade", "New line", "Replacement parts", "Pilot run"])}`,
+      customerId: customer._id,
+      accountName: customer.companyName || customer.fullName,
+      stage,
+      amount,
+      probability: stage === "Closed Won" ? 100 : stage === "Closed Lost" ? 0 : intBetween(10, 80),
+      owner: customer.accountManager,
+      source: pick(["Inbound", "Outbound", "Partner", "Trade show", "Referral"]),
+      productCategory: pick(categoryNames),
+      createdAt: daysAgo(createdDays),
+      closeDate: daysAgo(closed ? intBetween(0, createdDays) : -intBetween(7, 90)),
+      isClosed: closed,
+      isWon: stage === "Closed Won",
+    });
+  }
+  await db.collection("opportunities").insertMany(opportunities);
+
+  /* ---------------- plant floor ---------------- */
+  const PLANTS = ["Colombo Plant", "Austin Plant", "Munich Plant"];
+  const LINES = ["Line A", "Line B", "Line C", "Line D"];
+  const machines = [];
+  for (let i = 0; i < 12; i += 1) {
+    machines.push({
+      _id: new ObjectId(),
+      machineName: `${pick(["Press", "Filler", "Packer", "Oven", "Mixer", "Cutter"])} ${i + 1}`,
+      line: LINES[i % LINES.length],
+      plant: PLANTS[i % PLANTS.length],
+      status: weighted([["Running", 70], ["Idle", 18], ["Maintenance", 12]]),
+      installedOn: daysAgo(intBetween(200, 2000)),
+      ratedUnitsPerHour: intBetween(40, 220),
+    });
+  }
+  await db.collection("machines").insertMany(machines);
+
+  const WO_STATUS = [["Completed", 62], ["In progress", 18], ["Queued", 12], ["On hold", 5], ["Cancelled", 3]];
+  const workOrders = [];
+  for (let i = 0; i < 1600; i += 1) {
+    const product = pick(sellable);
+    const machine = pick(machines);
+    const status = weighted(WO_STATUS);
+    const planned = weighted([[50, 20], [120, 30], [250, 28], [600, 15], [1200, 7]]);
+    const opened = daysAgo(intBetween(0, 540));
+    const completed = status === "Completed" ? planned : status === "In progress" ? intBetween(0, planned) : 0;
+    workOrders.push({
+      _id: new ObjectId(),
+      workOrderNumber: `WO-${40000 + i}`,
+      productId: product._id,
+      productName: product.productName,
+      quantityPlanned: planned,
+      quantityCompleted: completed,
+      status,
+      plant: machine.plant,
+      machineId: machine._id,
+      machineName: machine.machineName,
+      line: machine.line,
+      openedAt: opened,
+      dueDate: new Date(opened.getTime() + intBetween(2, 21) * dayMs),
+      completedAt: status === "Completed" ? new Date(opened.getTime() + intBetween(1, 14) * dayMs) : null,
+    });
+  }
+  await db.collection("work_orders").insertMany(workOrders);
+
+  const productionRuns = [];
+  for (const order of workOrders.filter((item) => item.status === "Completed" || item.status === "In progress")) {
+    const runs = order.status === "Completed" ? intBetween(1, 3) : 1;
+    for (let r = 0; r < runs; r += 1) {
+      const produced = Math.round(order.quantityCompleted / runs);
+      const scrapped = Math.round(produced * between(0.01, 0.08));
+      const started = new Date(order.openedAt.getTime() + r * 8 * 3_600_000);
+      productionRuns.push({
+        _id: new ObjectId(),
+        workOrderId: order._id,
+        workOrderNumber: order.workOrderNumber,
+        machineId: order.machineId,
+        machineName: order.machineName,
+        line: order.line,
+        plant: order.plant,
+        startedAt: started,
+        endedAt: new Date(started.getTime() + intBetween(3, 18) * 3_600_000),
+        unitsProduced: produced,
+        unitsScrapped: scrapped,
+        yieldPercent: produced === 0 ? 0 : round2(produced / (produced + scrapped)),
+        downtimeMinutes: intBetween(0, 180),
+      });
+    }
+  }
+  await db.collection("production_runs").insertMany(productionRuns);
+
   await Promise.all([
     db.collection("orders").createIndex({ orderDate: -1 }),
     db.collection("orders").createIndex({ customerId: 1 }),
     db.collection("orders").createIndex({ status: 1 }),
     db.collection("support_tickets").createIndex({ openedAt: -1 }),
     db.collection("web_sessions").createIndex({ startedAt: -1 }),
+    db.collection("opportunities").createIndex({ closeDate: -1 }),
+    db.collection("work_orders").createIndex({ openedAt: -1 }),
+    db.collection("production_runs").createIndex({ startedAt: -1 }),
   ]);
 
-  for (const name of ["customers", "products", "orders", "support_tickets", "web_sessions"]) {
+  for (const name of [
+    "customers",
+    "products",
+    "orders",
+    "support_tickets",
+    "web_sessions",
+    "opportunities",
+    "machines",
+    "work_orders",
+    "production_runs",
+  ]) {
     console.log(`  ${name}: ${await db.collection(name).countDocuments()} documents`);
   }
   await client.close();

@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     template: "%s · Mosaic",
   },
   description:
-    "Point Mosaic at a MongoDB database. It learns what is in there and lets anyone build dashboards and reports without writing a query.",
+    "Register a customer, connect their MongoDB database, and Mosaic builds the sales and plant boards they would actually open.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

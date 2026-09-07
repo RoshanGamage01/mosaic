@@ -9,7 +9,7 @@ import { AddToDashboard } from "@/components/dashboard/add-to-dashboard";
 import { Button } from "@/components/ui/button";
 import { formatRelative } from "@/lib/format";
 import type { CollectionProfile, Report } from "@/lib/types";
-import { describe } from "@/components/builder/report-builder";
+import { describe } from "@/lib/describe";
 
 export function ReportViewer({
   report,

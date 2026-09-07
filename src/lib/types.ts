@@ -1,6 +1,28 @@
 import { z } from "zod";
 
 /* ------------------------------------------------------------------ */
+/* Customer tenants                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A tenant is one customer company. Every connection, report and dashboard
+ * belongs to one tenant, so two customers never share a workspace.
+ */
+export const industries = ["manufacturing", "sales", "both"] as const;
+export type Industry = (typeof industries)[number];
+
+export const tenantSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  industry: z.enum(industries),
+  contactName: z.string().optional(),
+  createdAt: z.string(),
+  /** Plain-language briefing written after the last scan. */
+  briefing: z.string().optional(),
+});
+export type Tenant = z.infer<typeof tenantSchema>;
+
+/* ------------------------------------------------------------------ */
 /* Data sources                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -14,6 +36,7 @@ export type DataSourceStatus = (typeof dataSourceStatuses)[number];
 
 export const dataSourceSchema = z.object({
   id: z.string(),
+  tenantId: z.string(),
   name: z.string(),
   uri: z.string(),
   database: z.string(),
@@ -275,6 +298,7 @@ export type ReportSpec = z.infer<typeof reportSpecSchema>;
 
 export const reportSchema = z.object({
   id: z.string(),
+  tenantId: z.string(),
   name: z.string(),
   description: z.string().optional(),
   emoji: z.string().optional(),
@@ -299,9 +323,12 @@ export type Tile = z.infer<typeof tileSchema>;
 
 export const dashboardSchema = z.object({
   id: z.string(),
+  tenantId: z.string(),
   name: z.string(),
   description: z.string().optional(),
   emoji: z.string().optional(),
+  /** `sales`, `plant`, or `overview` — groups the home tabs. */
+  kind: z.string().optional(),
   tiles: z.array(tileSchema).default([]),
   /** Applied on top of every tile whose data set has a date field. */
   timeRange: z

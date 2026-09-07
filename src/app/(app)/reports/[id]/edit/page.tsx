@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 
-import { ReportBuilder } from "@/components/builder/report-builder";
+import { Studio } from "@/components/builder/studio";
 import { loadCatalogs } from "@/lib/server-data";
 import { store } from "@/lib/store";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,8 @@ export async function generateMetadata({ params }: PageProps<"/reports/[id]/edit
 
 export default async function EditReportPage({ params }: PageProps<"/reports/[id]/edit">) {
   const { id } = await params;
-  const [report, catalogs] = await Promise.all([store.getReport(id), loadCatalogs()]);
-  if (!report) notFound();
-  return <ReportBuilder catalogs={catalogs} report={report} />;
+  const tenant = await getCurrentTenant();
+  const [report, catalogs] = await Promise.all([store.getReport(id), loadCatalogs(tenant?.id)]);
+  if (!report || !tenant || report.tenantId !== tenant.id) notFound();
+  return <Studio catalogs={catalogs} report={report} />;
 }

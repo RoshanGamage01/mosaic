@@ -7,21 +7,24 @@ import { PageBody, PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { formatCompact, formatRelative } from "@/lib/format";
 import { store } from "@/lib/store";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Your data" };
 
 export default async function DataPage({ searchParams }: PageProps<"/data">) {
   const params = await searchParams;
-  const sources = await store.listSources();
+  const tenant = await getCurrentTenant();
+  if (!tenant) return null;
+  const sources = await store.listSources(tenant.id);
   const catalogs = await Promise.all(sources.map((source) => store.getCatalog(source.id)));
 
   return (
     <PageBody className="space-y-6">
       <PageHeader
-        eyebrow="Your data"
-        title="What Mosaic knows about your databases"
-        description="Every connection is scanned once, then kept as a plain-language catalog. Rename anything that does not read well — reports follow your wording."
+        eyebrow="Database"
+        title="The database this company reports on"
+        description="Mosaic reads it, names the records in plain language, and keeps your corrections."
         actions={<ConnectWizard autoOpen={params.connect === "1"} />}
       />
 

@@ -307,6 +307,7 @@ export function starterDashboard(
       const id = `rpt_${collection.name.replace(/[^a-z0-9]/gi, "")}_${collectionIndex}${index}`;
       reports.push({
         id,
+        tenantId: "",
         name: suggestion.name,
         description: suggestion.description,
         spec: suggestion.spec,

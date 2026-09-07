@@ -7,13 +7,19 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatRelative } from "@/lib/format";
 import { store } from "@/lib/store";
+import { getCurrentTenant } from "@/lib/tenant";
 import { visualMeta } from "@/lib/visuals";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Reports" };
 
 export default async function ReportsPage() {
-  const [reports, sources] = await Promise.all([store.listReports(), store.listSources()]);
+  const tenant = await getCurrentTenant();
+  if (!tenant) return null;
+  const [reports, sources] = await Promise.all([
+    store.listReports(tenant.id),
+    store.listSources(tenant.id),
+  ]);
   const sourceNames = new Map(sources.map((source) => [source.id, source.name]));
   const catalogs = await Promise.all(sources.map((source) => store.getCatalog(source.id)));
   const collectionLabels = new Map(
@@ -29,12 +35,12 @@ export default async function ReportsPage() {
     <PageBody className="space-y-6">
       <PageHeader
         eyebrow="Reports"
-        title="Every question you have asked so far"
-        description="A report is one question answered one way. Save it, then drop it onto as many dashboards as you like."
+        title="Questions this company has saved"
+        description="Each report is one question. Open it, change the split, or pin it on a board."
         actions={
           <Button render={<Link href="/reports/new" />} className="rounded-xl">
             <Plus className="size-4" />
-            Build a report
+            New question
           </Button>
         }
       />
@@ -43,10 +49,10 @@ export default async function ReportsPage() {
         <EmptyState
           icon={PieChart}
           title="No reports yet"
-          description="Start from a blank canvas or pick one of the suggestions on the home page — either way you never write a query."
+          description="Ask a question on the home page, or start from a blank canvas. You never write a query."
           action={
             <Button render={<Link href="/reports/new" />} className="rounded-xl">
-              Build your first report
+              Ask the first question
             </Button>
           }
         />

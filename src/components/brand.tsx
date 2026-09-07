@@ -24,13 +24,13 @@ export function MosaicMark({ className }: { className?: string }) {
   );
 }
 
-export function Wordmark({ className }: { className?: string }) {
+export function Wordmark({ className, subtitle = "for your operation" }: { className?: string; subtitle?: string }) {
   return (
     <span className={cn("flex items-center gap-2.5", className)}>
       <MosaicMark />
-      <span className="flex flex-col leading-none">
+      <span className="flex min-w-0 flex-col leading-none">
         <span className="text-[15px] font-semibold tracking-tight">Mosaic</span>
-        <span className="text-[11px] font-medium text-muted-foreground">Reporting agent</span>
+        <span className="truncate text-[11px] font-medium text-muted-foreground">{subtitle}</span>
       </span>
     </span>
   );

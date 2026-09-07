@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
-import { ReportBuilder } from "@/components/builder/report-builder";
+import { Studio } from "@/components/builder/studio";
 import type { SourceCatalog } from "@/components/builder/dataset-picker";
 import { decodeSpec } from "@/lib/spec-link";
 
@@ -14,7 +14,7 @@ function Inner({ catalogs }: { catalogs: SourceCatalog[] }) {
   const name = params.get("name") ?? undefined;
 
   return (
-    <ReportBuilder
+    <Studio
       key={encoded ?? "blank"}
       catalogs={catalogs}
       initialSpec={spec ?? undefined}
@@ -23,7 +23,6 @@ function Inner({ catalogs }: { catalogs: SourceCatalog[] }) {
   );
 }
 
-/** Reads a pre-filled spec out of the URL when arriving from a suggestion. */
 export function NewReportBuilder({ catalogs }: { catalogs: SourceCatalog[] }) {
   return (
     <Suspense fallback={null}>

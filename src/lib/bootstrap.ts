@@ -3,12 +3,12 @@ import "server-only";
 import { newId } from "./api";
 import { scanSource } from "./agent/register";
 import { store } from "./store";
-import type { DataSource } from "./types";
+import type { DataSource, Tenant } from "./types";
 
 /**
  * A brand new install has nothing to look at. When a sample database is
- * configured we register and scan it once, so the first screen shows a working
- * dashboard instead of an empty state.
+ * configured we register a sample company, attach the database and let the
+ * analyst build the boards, so the first screen is a working operation.
  */
 const globalFlag = globalThis as unknown as { __mosaicBootstrap?: Promise<void> };
 
@@ -18,11 +18,19 @@ async function run() {
   if (!uri || !database) return;
 
   const snapshot = await store.snapshot();
-  if (snapshot.meta.seededAt || snapshot.sources.length > 0) return;
+  if (snapshot.meta.seededAt || snapshot.tenants.length > 0) return;
+
+  const tenant: Tenant = {
+    id: newId("ten"),
+    name: process.env.MOSAIC_DEMO_NAME || "Halcyon Manufacturing",
+    industry: "both",
+    createdAt: new Date().toISOString(),
+  };
 
   const source: DataSource = {
     id: newId("src"),
-    name: process.env.MOSAIC_DEMO_NAME || "Sample company data",
+    tenantId: tenant.id,
+    name: database,
     uri,
     database,
     status: "pending",
@@ -32,12 +40,12 @@ async function run() {
   };
 
   try {
+    await store.upsertTenant(tenant);
     await store.upsertSource(source);
     await scanSource(source);
     await store.markSeeded();
   } catch {
-    // A missing sample database must never block the app from starting.
-    await store.deleteSource(source.id).catch(() => undefined);
+    await store.deleteTenant(tenant.id).catch(() => undefined);
   }
 }
 

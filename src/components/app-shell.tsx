@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   Database,
@@ -15,13 +15,15 @@ import {
 import { Wordmark } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { api } from "@/lib/client";
+import type { Tenant } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/", label: "Home", icon: Sparkles, exact: true },
-  { href: "/dashboards", label: "Dashboards", icon: LayoutGrid },
+  { href: "/dashboards", label: "Boards", icon: LayoutGrid },
   { href: "/reports", label: "Reports", icon: PieChart },
-  { href: "/data", label: "Your data", icon: Database },
+  { href: "/data", label: "Database", icon: Database },
 ];
 
 function isActive(pathname: string, href: string, exact?: boolean) {
@@ -59,63 +61,96 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function SidebarBody({
-  connected,
+  tenant,
+  tenants,
   onNavigate,
 }: {
-  connected: boolean;
+  tenant?: Tenant;
+  tenants: Tenant[];
   onNavigate?: () => void;
 }) {
+  const router = useRouter();
+
+  async function switchTenant(id: string) {
+    await api(`/api/tenants/${id}/select`, { method: "POST" });
+    onNavigate?.();
+    router.push("/");
+    router.refresh();
+  }
+
   return (
     <div className="flex h-full flex-col gap-6 p-4">
       <Link href="/" onClick={onNavigate} className="px-2 pt-2">
-        <Wordmark />
+        <Wordmark subtitle={tenant?.name ?? "for your operation"} />
       </Link>
 
-      <Button
-        render={<Link href="/reports/new" onClick={onNavigate} />}
-        className="justify-start gap-2 rounded-xl"
-        size="lg"
-      >
-        <Plus className="size-4" />
-        Build a report
-      </Button>
+      {tenant ? (
+        <Button
+          render={<Link href="/reports/new" onClick={onNavigate} />}
+          className="justify-start gap-2 rounded-xl"
+          size="lg"
+        >
+          <Plus className="size-4" />
+          New report
+        </Button>
+      ) : null}
 
-      <NavLinks onNavigate={onNavigate} />
+      {tenant ? <NavLinks onNavigate={onNavigate} /> : null}
 
-      {/* Setup advice is only advice until there is something connected. */}
-      {connected ? null : (
-        <div className="mt-auto rounded-xl border border-dashed border-border bg-muted/40 p-3.5">
-          <p className="text-[13px] font-medium">Nothing to configure</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Mosaic reads your database directly. Connect one and it works out what is inside.
-          </p>
-          <Button
-            render={<Link href="/data?connect=1" onClick={onNavigate} />}
-            variant="outline"
-            size="sm"
-            className="mt-3 w-full rounded-lg"
-          >
-            Connect a database
-          </Button>
-        </div>
-      )}
+      <div className="mt-auto space-y-3">
+        {tenants.length > 1 ? (
+          <div className="rounded-xl border border-border bg-muted/40 p-2">
+            <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Companies
+            </p>
+            {tenants.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => void switchTenant(item.id)}
+                className={cn(
+                  "flex w-full rounded-lg px-2 py-1.5 text-left text-sm",
+                  item.id === tenant?.id ? "bg-card font-medium" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {item.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <Button
+          render={<Link href="/register" onClick={onNavigate} />}
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start rounded-lg text-muted-foreground"
+        >
+          Register another company
+        </Button>
+      </div>
     </div>
   );
 }
 
 export function AppShell({
   children,
-  connected,
+  tenant,
+  tenants,
 }: {
   children: React.ReactNode;
-  connected: boolean;
+  tenant?: Tenant;
+  tenants: Tenant[];
 }) {
   const [open, setOpen] = useState(false);
+  const setup = !tenant;
+
+  if (setup) {
+    return <div className="app-canvas min-h-dvh">{children}</div>;
+  }
 
   return (
     <div className="app-canvas flex min-h-dvh">
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-sidebar-border bg-sidebar/70 backdrop-blur-xl lg:block">
-        <SidebarBody connected={connected} />
+        <SidebarBody tenant={tenant} tenants={tenants} />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -126,10 +161,10 @@ export function AppShell({
             </SheetTrigger>
             <SheetContent side="left" className="w-72 p-0">
               <SheetTitle className="sr-only">Navigation</SheetTitle>
-              <SidebarBody connected={connected} onNavigate={() => setOpen(false)} />
+              <SidebarBody tenant={tenant} tenants={tenants} onNavigate={() => setOpen(false)} />
             </SheetContent>
           </Sheet>
-          <Wordmark />
+          <Wordmark subtitle={tenant.name} />
         </header>
 
         <main className="min-w-0 flex-1">{children}</main>

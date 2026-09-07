@@ -61,12 +61,14 @@ export function DashboardView({
   reports,
   dateFields,
   allReports,
+  embedded = false,
 }: {
   dashboard: Dashboard;
   reports: Report[];
   /** Report id → the date field its data set trends on. */
   dateFields: Record<string, string | undefined>;
   allReports: { id: string; name: string; description?: string }[];
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const [dashboard, setDashboard] = useState(initial);
@@ -111,18 +113,21 @@ export function DashboardView({
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1500px] px-5 py-8 sm:px-8 sm:py-10">
+    <div className={embedded ? "w-full" : "mx-auto w-full max-w-[1500px] px-5 py-8 sm:px-8 sm:py-10"}>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        {embedded ? <div /> : (
         <div className="min-w-0 space-y-1.5">
-          <Button
-            render={<Link href="/dashboards" />}
-            variant="ghost"
-            size="sm"
-            className="-ml-2 h-7 rounded-lg text-muted-foreground"
-          >
-            <ArrowLeft className="size-3.5" />
-            All dashboards
-          </Button>
+          {embedded ? null : (
+            <Button
+              render={<Link href="/dashboards" />}
+              variant="ghost"
+              size="sm"
+              className="-ml-2 h-7 rounded-lg text-muted-foreground"
+            >
+              <ArrowLeft className="size-3.5" />
+              All boards
+            </Button>
+          )}
           <div className="flex items-center gap-2.5">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-xl">
               {dashboard.emoji ?? "📊"}
@@ -142,6 +147,7 @@ export function DashboardView({
             <p className="max-w-2xl text-sm text-muted-foreground">{dashboard.description}</p>
           ) : null}
         </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2">
           <Select
@@ -164,34 +170,38 @@ export function DashboardView({
             </SelectContent>
           </Select>
 
-          <AddTile
-            allReports={allReports}
-            existing={dashboard.tiles.map((tile) => tile.reportId)}
-            onAdd={(reportId) =>
-              persist({
-                tiles: [
-                  ...dashboard.tiles,
-                  { id: localId("tile"), reportId, width: 6, height: "medium" },
-                ],
-              })
-            }
-          />
+          {embedded ? null : (
+            <>
+              <AddTile
+                allReports={allReports}
+                existing={dashboard.tiles.map((tile) => tile.reportId)}
+                onAdd={(reportId) =>
+                  persist({
+                    tiles: [
+                      ...dashboard.tiles,
+                      { id: localId("tile"), reportId, width: 6, height: "medium" },
+                    ],
+                  })
+                }
+              />
 
-          <Button
-            variant={editing ? "default" : "outline"}
-            size="sm"
-            onClick={() => setEditing((value) => !value)}
-            className="rounded-xl"
-          >
-            {saving ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : editing ? (
-              <Check className="size-4" />
-            ) : (
-              <Pencil className="size-4" />
-            )}
-            {editing ? "Done" : "Arrange"}
-          </Button>
+              <Button
+                variant={editing ? "default" : "outline"}
+                size="sm"
+                onClick={() => setEditing((value) => !value)}
+                className="rounded-xl"
+              >
+                {saving ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : editing ? (
+                  <Check className="size-4" />
+                ) : (
+                  <Pencil className="size-4" />
+                )}
+                {editing ? "Done" : "Arrange"}
+              </Button>
+            </>
+          )}
 
           {editing ? (
             <Button

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { handleError, newId, ok } from "@/lib/api";
 import { store } from "@/lib/store";
+import { requireTenant } from "@/lib/tenant";
 import { tileSchema, type Dashboard } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -9,7 +10,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const dashboards = await store.listDashboards();
+    const tenant = await requireTenant();
+    const dashboards = await store.listDashboards(tenant.id);
     return ok(dashboards.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
   } catch (error) {
     return handleError(error);
@@ -25,10 +27,12 @@ const createSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const tenant = await requireTenant();
     const body = createSchema.parse(await request.json());
     const now = new Date().toISOString();
     const dashboard: Dashboard = {
       id: newId("dsh"),
+      tenantId: tenant.id,
       name: body.name,
       description: body.description,
       emoji: body.emoji,

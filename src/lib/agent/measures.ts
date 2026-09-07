@@ -59,7 +59,7 @@ export function metricLabel(
   }
 }
 
-const TRANSACTIONAL = /(order|sale|transaction|invoice|payment|booking|reservation|subscription|shipment|deal|opportunity|claim|policy)/i;
+const TRANSACTIONAL = /(order|sale|transaction|invoice|payment|booking|reservation|subscription|shipment|deal|opportunity|claim|policy|work.?order|production)/i;
 const OPERATIONAL = /(log|event|session|audit|cache|queue|job|token|migration|revision|history|tracking|ping|heartbeat)/i;
 
 /**

@@ -7,19 +7,20 @@ import { PageBody } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { withoutConnectionLink } from "@/lib/redact";
 import { store } from "@/lib/store";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: PageProps<"/data/[id]">) {
   const { id } = await params;
   const source = await store.getSource(id);
-  return { title: source?.name ?? "Data source" };
+  return { title: source?.name ?? "Database" };
 }
 
 export default async function DataSourcePage({ params }: PageProps<"/data/[id]">) {
   const { id } = await params;
-  const source = await store.getSource(id);
-  if (!source) notFound();
+  const [source, tenant] = await Promise.all([store.getSource(id), getCurrentTenant()]);
+  if (!source || !tenant || source.tenantId !== tenant.id) notFound();
 
   const catalog = await store.getCatalog(id);
   const safe = withoutConnectionLink(source);
@@ -34,12 +35,12 @@ export default async function DataSourcePage({ params }: PageProps<"/data/[id]">
           className="-ml-2 h-7 rounded-lg text-muted-foreground"
         >
           <ArrowLeft className="size-3.5" />
-          All connections
+          All databases
         </Button>
         <h1 className="text-2xl font-semibold tracking-tight">{source.name}</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          This is Mosaic&apos;s reading of your database. Anything you change here — names, what a
-          field means, what stays hidden — is what everyone sees when they build a report.
+          Mosaic reads the <span className="font-medium text-foreground">{source.database}</span>{" "}
+          database. Rename a field here and every report for this company uses the new name.
         </p>
       </div>
 

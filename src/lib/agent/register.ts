@@ -1,10 +1,10 @@
 import "server-only";
 
+import { analyseAndBuild, persistAnalysis } from "./analyst";
 import { explainConnectionError, getClient } from "./client";
 import { discoverDatabase, type DiscoveryProgress } from "./discover";
-import { starterDashboard } from "./suggest";
 import { store } from "../store";
-import type { DataSource } from "../types";
+import type { DataSource, Tenant } from "../types";
 
 export type DatabaseSummary = {
   name: string;
@@ -55,13 +55,13 @@ export async function inspectServer(uri: string): Promise<{
 }
 
 /**
- * Scans a registered source and stores the catalog. On the very first scan it
- * also assembles a starter dashboard so the workspace is never empty.
+ * Scans a registered source, then the analyst builds the boards that match
+ * what this customer's database can actually answer.
  */
 export async function scanSource(
   source: DataSource,
   onProgress?: (progress: DiscoveryProgress) => void,
-): Promise<{ collections: number; fields: number; createdDashboard?: string }> {
+): Promise<{ collections: number; fields: number; createdDashboard?: string; briefing?: string }> {
   await store.patchSource(source.id, { status: "scanning", error: undefined });
   try {
     const client = await getClient(source.uri);
@@ -78,14 +78,17 @@ export async function scanSource(
     });
 
     const fields = catalog.collections.reduce((sum, c) => sum + c.fields.length, 0);
-
-    const dashboards = await store.listDashboards();
+    const tenant = await store.getTenant(source.tenantId);
     let createdDashboard: string | undefined;
-    if (dashboards.length === 0 && catalog.collections.length > 0) {
-      createdDashboard = await buildStarterDashboard(source, catalog.collections);
+    let briefing: string | undefined;
+    if (tenant && catalog.collections.length > 0) {
+      const analysis = await analyseAndBuild({ tenant, source, catalog });
+      await persistAnalysis(analysis, tenant.id);
+      createdDashboard = analysis.dashboards[0]?.id;
+      briefing = analysis.briefing;
     }
 
-    return { collections: catalog.collections.length, fields, createdDashboard };
+    return { collections: catalog.collections.length, fields, createdDashboard, briefing };
   } catch (error) {
     const friendly = explainConnectionError(error);
     await store.patchSource(source.id, { status: "error", error: friendly.message });
@@ -93,29 +96,10 @@ export async function scanSource(
   }
 }
 
-export async function buildStarterDashboard(
-  source: DataSource,
-  collections: Awaited<ReturnType<typeof discoverDatabase>>["collections"],
-): Promise<string> {
-  const now = new Date().toISOString();
-  const { reports, tiles } = starterDashboard(source.id, collections);
-  for (const report of reports) await store.upsertReport(report);
-
-  const dashboardId = `dsh_${source.id.slice(-6)}_overview`;
-  await store.upsertDashboard({
-    id: dashboardId,
-    name: `${source.name} overview`,
-    description: "Built automatically from what the agent found. Edit or add tiles any time.",
-    emoji: "✨",
-    tiles: tiles.map((tile, index) => ({
-      id: `tile_${index}`,
-      reportId: tile.reportId,
-      width: tile.width,
-      height: tile.width >= 12 ? ("medium" as const) : ("medium" as const),
-    })),
-    timeRange: { preset: "all" },
-    createdAt: now,
-    updatedAt: now,
-  });
-  return dashboardId;
+export async function rebuildForTenant(tenant: Tenant, source: DataSource) {
+  const catalog = await store.getCatalog(source.id);
+  if (!catalog) return;
+  const analysis = await analyseAndBuild({ tenant, source, catalog });
+  await persistAnalysis(analysis, tenant.id);
+  return analysis;
 }

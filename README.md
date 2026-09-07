@@ -1,52 +1,39 @@
 # Mosaic
 
-Mosaic is a reporting agent you install next to a MongoDB database. Point it at a
-database once and it works out what is inside — what each collection holds, what
-every field means, and how the collections link together. From then on anyone on
-the team can build dashboards and reports by picking things from a list, without
-knowing a collection name, a field path, or a line of query syntax.
+Mosaic is a reporting workspace you install next to the systems a manufacturing
+or sales-force company already runs. You register the customer as a tenant,
+point Mosaic at their MongoDB database, and it reads the records the way a plant
+or sales lead would — orders, pipeline, work orders, yield, stock — then opens
+boards they can use on a Monday morning.
 
-It exists because report requests never stop. Every project ends up needing its
-own bespoke report screen, and every one of those needs somebody who already
-knows the schema. Mosaic replaces that work with a self-service builder that
-learns each new database on its own.
+Every report lives inside that customer tenant. Two companies never share a
+workspace. People ask questions in plain language. They do not write queries,
+and they do not walk a five-step designer.
 
 ## What it does
 
-**Registers a database and reads it.** Paste a connection link, choose a
-database and Mosaic samples every collection to build a catalog. For each field
-it records the types it saw, how often the field is present, how many distinct
-values it holds, its value range and a few real examples.
+**Registers a customer company.** Name, whether they manufacture, sell, or both.
+Everything after that — databases, reports, boards — belongs to that company.
 
-**Names things in plain language.** `order_items.unitPriceUSD` becomes
-"Order Items › Unit Price USD". `support_tickets` becomes "Support Tickets", and
-the app knows the singular is "support ticket" so sentences read properly.
+**Connects their database by name.** Paste a MongoDB link, pick the database,
+and Mosaic only ever reads it.
 
-**Works out what each field is for.** Every field is sorted into a role — a
-number you can add up, a date you can trend, a category you can group by, a
-yes/no flag, a reference, or free text — and given a display format such as
-money, percentage or whole number. Stored timestamps, numeric IDs that should
-never be summed, and secret-looking fields are all detected and handled.
+**Reads it as an operations analyst.** Collections are mapped onto real
+processes (sales orders, pipeline, production, machines, inventory). Reports are
+only created when the records to answer them actually exist, so a CRM never gets
+a yield board and a plant never gets an empty pipeline.
 
-**Finds links between collections.** A field called `customerId` is matched
-against the `customers` collection, then verified by checking that real values
-actually point at real documents before the link is recorded.
+**Opens on the operation, not the schema.** Home is this morning's numbers, an
+ask bar, and a sales board or a plant board.
 
-**Suggests where to start.** After a scan, Mosaic ranks the collections by how
-interesting they are for reporting and assembles a starter dashboard from them,
-so a fresh install opens on something useful rather than an empty state.
+**Lets anyone ask the next question.** Type "revenue by sales rep" or "yield by
+machine". Mosaic picks the number, the split and the chart. The canvas has three
+controls: the number, what to split by, and how it should look.
 
-**Lets anyone build the rest.** The builder is five plain steps: what to look at,
-what to measure, how to break it down, what to include, and how to show it. The
-chart updates as you go. Behind it, a compiler turns the choices into a MongoDB
-aggregation pipeline, which you can inspect at any time under "Show the query".
-
-**Dashboards.** Arrange saved reports into a grid, resize tiles, and set one
-time range that applies to every tile that has a date.
-
-**Corrections stick.** Everything the agent guessed is editable in the data
-catalog — labels, roles, formats, what stays hidden, which date drives time
-filters. Reports follow your wording, not the database's.
+**Optional language model.** Set `MOSAIC_AI_KEY` and Mosaic will call any
+OpenAI-compatible endpoint to refine the briefing and the questions. There is no
+Cursor SDK that can run inside a customer's install; without a key the
+manufacturing and sales-force playbook still builds the boards.
 
 ## Running it locally
 
@@ -59,9 +46,9 @@ npm install
 ### With the sample database
 
 The repo ships a script that fetches a standalone MongoDB server and runs it on
-port 47017, plus a seeder that fills it with a fictional trading company:
-customers, products, orders with line items, support tickets and web sessions,
-covering two years with realistic seasonality.
+port 47017, plus a seeder that fills it with a fictional manufacturer that also
+sells through a sales force: customers, products, orders, a Salesforce-style
+pipeline, machines, work orders and production runs.
 
 ```bash
 npm run mongo     # first run downloads MongoDB, then serves on 127.0.0.1:47017
@@ -75,14 +62,14 @@ cp .env.example .env.local   # already points at the sample database
 npm run dev
 ```
 
-Open http://localhost:3000. On first boot Mosaic registers the sample database,
-scans it and builds a starter dashboard automatically.
+Open http://localhost:3000. On first boot Mosaic registers a sample company
+(Halcyon Manufacturing), scans the database and opens sales and plant boards.
 
-### With your own database
+### With a real customer
 
-Skip the seed step. Start the app, open **Your data → Connect a database** and
-paste your connection link. A read-only user is enough — Mosaic never writes to
-the database it reports on.
+Start the app, open **Register another company**, name them, pick manufacturing
+or sales operations, then connect their MongoDB database. A read-only user is
+enough — Mosaic never writes to the database it reports on.
 
 ## Configuration
 
@@ -93,6 +80,7 @@ All settings are environment variables; see `.env.example`.
 | `MOSAIC_DATA_DIR` | Where Mosaic keeps its own state. Defaults to `./.mosaic`. |
 | `MOSAIC_STORE_URI` / `MOSAIC_STORE_DB` / `MOSAIC_STORE_COLLECTION` | Keep that state in MongoDB instead of a file. |
 | `MOSAIC_DEMO_URI` / `MOSAIC_DEMO_DB` / `MOSAIC_DEMO_NAME` | A database to register and scan automatically on a brand new install. Leave unset in production. |
+| `MOSAIC_AI_URL` / `MOSAIC_AI_KEY` / `MOSAIC_AI_MODEL` | Optional OpenAI-compatible model for the analyst and the ask bar. |
 | `NEXT_PUBLIC_MOSAIC_CURRENCY` | Currency used to format money fields. Defaults to `USD`. |
 | `NEXT_PUBLIC_MOSAIC_LOCALE` | Locale used for numbers and dates. Defaults to `en-US`. |
 
@@ -131,19 +119,23 @@ src/
       client.ts        connection pooling and human-readable connection errors
       discover.ts      samples documents and builds the field catalog
       classify.ts      decides what each field is and how to format it
-      naming.ts        turns identifiers into English
-      measures.ts      picks the right summary for a number, and names it
-      register.ts      registers a source, scans it, builds the starter dashboard
-      suggest.ts       proposes starter reports for a collection
+      concepts.ts      maps collections onto plant and sales processes
+      playbook.ts      the questions a plant or sales lead actually asks
+      analyst.ts       builds boards only from records that can answer them
+      ask.ts           turns a plain-language question into a report
+      llm.ts           optional OpenAI-compatible model
+      register.ts      connects a database and runs the analyst
+    tenant.ts          the customer company this session is working in
+    store.ts           tenants, connections, reports and boards
     query/
       compile.ts       report spec  ->  MongoDB aggregation pipeline
       run.ts           executes a spec and normalises the result
       shape.ts         reshapes flat results for charting
       warnings.ts      explains when a breakdown will inflate the numbers
-    store.ts           the workspace, in a JSON file or in MongoDB
     types.ts           the report spec and catalog schemas
   components/
-    builder/           the report builder
+    builder/           the report canvas (ask, pick a number, split, chart)
+    tenant/            company registration
     dashboard/         dashboard grid and tiles
     charts/            chart rendering
     data/              connect wizard and data catalog

@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 
 import { ConnectionError } from "./agent/client";
 import { QueryError } from "./query/compile";
+import { TenantError } from "./tenant";
 
 export function ok<T>(data: T, init?: ResponseInit) {
   return NextResponse.json(data, init);
@@ -23,6 +24,7 @@ export function handleError(error: unknown) {
   }
   if (error instanceof ConnectionError) return fail(error.message, 502, error.hint);
   if (error instanceof QueryError) return fail(error.message, 400);
+  if (error instanceof TenantError) return fail(error.message, 409);
   if (error instanceof Error) {
     if (/maxTimeMS|operation exceeded time limit/i.test(error.message)) {
       return fail(
