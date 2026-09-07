@@ -32,8 +32,17 @@ export function useReportData(spec: ReportSpec | null, { debounce = 350 } = {}) 
         .then((result) => {
           if (!cancelled) setLoaded({ key, result, error: null });
         })
-        .catch((error: ApiError) => {
-          if (!cancelled) setLoaded({ key, result: null, error });
+        .catch((error: unknown) => {
+          if (!cancelled) {
+            setLoaded({
+              key,
+              result: null,
+              error:
+                error instanceof ApiError
+                  ? error
+                  : new ApiError(error instanceof Error ? error.message : "Could not run this report."),
+            });
+          }
         });
     }, debounce);
 

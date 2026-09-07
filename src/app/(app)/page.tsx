@@ -110,6 +110,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
 
       {bundle ? (
         <DashboardView
+          key={bundle.dashboard.id}
           dashboard={bundle.dashboard}
           reports={bundle.reports}
           dateFields={bundle.dateFields}

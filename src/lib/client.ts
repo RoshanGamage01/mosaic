@@ -27,14 +27,19 @@ export async function api<T>(
   init?: RequestInit & { json?: unknown },
 ): Promise<T> {
   const { json, ...rest } = init ?? {};
-  const response = await fetch(url, {
-    ...rest,
-    headers: {
-      ...(json !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...rest.headers,
-    },
-    body: json !== undefined ? JSON.stringify(json) : rest.body,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...rest,
+      headers: {
+        ...(json !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...rest.headers,
+      },
+      body: json !== undefined ? JSON.stringify(json) : rest.body,
+    });
+  } catch {
+    throw new ApiError("Could not reach Mosaic.", "The app may still be starting. Try again in a moment.");
+  }
   return parse(response) as Promise<T>;
 }
 

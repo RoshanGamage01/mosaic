@@ -43,11 +43,18 @@ const OPTIONS = {
 const SIMPLE_VISUALS: Visual[] = ["kpi", "column", "bar", "line", "area", "donut", "table"];
 
 function firstCollection(catalogs: SourceCatalog[]) {
+  const ranked: { sourceId: string; collection: CollectionProfile; rank: number }[] = [];
   for (const entry of catalogs) {
-    const collection = entry.catalog.collections.find((item) => !item.hidden && item.fields.length > 0);
-    if (collection) return { sourceId: entry.sourceId, collection };
+    for (const collection of entry.catalog.collections) {
+      if (collection.hidden || collection.fields.length === 0) continue;
+      const process = classifyCollection(collection);
+      const rank =
+        process === "web" || process === "other" ? 3 : process === "service" ? 2 : process === "customers" ? 1 : 0;
+      ranked.push({ sourceId: entry.sourceId, collection, rank });
+    }
   }
-  return null;
+  ranked.sort((a, b) => a.rank - b.rank || b.collection.documentCount - a.collection.documentCount);
+  return ranked[0] ?? null;
 }
 
 function findCollection(catalogs: SourceCatalog[], sourceId: string, name: string) {

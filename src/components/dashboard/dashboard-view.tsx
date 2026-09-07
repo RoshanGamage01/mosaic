@@ -78,6 +78,10 @@ export function DashboardView({
   const byId = new Map(reports.map((report) => [report.id, report]));
   const range = RANGES.find((item) => item.key === (dashboard.timeRange?.preset ?? "all")) ?? RANGES[0];
 
+  if (dashboard.id !== initial.id) {
+    setDashboard(initial);
+  }
+
   async function persist(patch: Partial<Dashboard>) {
     const next = { ...dashboard, ...patch };
     setDashboard(next);
@@ -115,9 +119,8 @@ export function DashboardView({
   return (
     <div className={embedded ? "w-full" : "mx-auto w-full max-w-[1500px] px-5 py-8 sm:px-8 sm:py-10"}>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        {embedded ? <div /> : (
-        <div className="min-w-0 space-y-1.5">
-          {embedded ? null : (
+        {embedded ? null : (
+          <div className="min-w-0 space-y-1.5">
             <Button
               render={<Link href="/dashboards" />}
               variant="ghost"
@@ -127,26 +130,25 @@ export function DashboardView({
               <ArrowLeft className="size-3.5" />
               All boards
             </Button>
-          )}
-          <div className="flex items-center gap-2.5">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-xl">
-              {dashboard.emoji ?? "📊"}
-            </span>
-            {editing ? (
-              <Input
-                value={dashboard.name}
-                onChange={(event) => setDashboard({ ...dashboard, name: event.target.value })}
-                onBlur={(event) => persist({ name: event.target.value })}
-                className="h-9 max-w-sm rounded-xl text-lg font-semibold"
-              />
-            ) : (
-              <h1 className="text-2xl font-semibold tracking-tight text-balance">{dashboard.name}</h1>
-            )}
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-xl">
+                {dashboard.emoji ?? "📊"}
+              </span>
+              {editing ? (
+                <Input
+                  value={dashboard.name}
+                  onChange={(event) => setDashboard({ ...dashboard, name: event.target.value })}
+                  onBlur={(event) => persist({ name: event.target.value })}
+                  className="h-9 max-w-sm rounded-xl text-lg font-semibold"
+                />
+              ) : (
+                <h1 className="text-2xl font-semibold tracking-tight text-balance">{dashboard.name}</h1>
+              )}
+            </div>
+            {dashboard.description ? (
+              <p className="max-w-2xl text-sm text-muted-foreground">{dashboard.description}</p>
+            ) : null}
           </div>
-          {dashboard.description ? (
-            <p className="max-w-2xl text-sm text-muted-foreground">{dashboard.description}</p>
-          ) : null}
-        </div>
         )}
 
         <div className="flex flex-wrap items-center gap-2">
@@ -234,7 +236,7 @@ export function DashboardView({
                 }
               />
               <Button render={<Link href="/reports/new" />} variant="outline" className="rounded-xl">
-                Build a report
+                New question
               </Button>
             </div>
           }

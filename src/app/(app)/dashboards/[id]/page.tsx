@@ -20,6 +20,7 @@ export default async function DashboardPage({ params }: PageProps<"/dashboards/[
   if (!bundle || !tenant || bundle.dashboard.tenantId !== tenant.id) notFound();
   return (
     <DashboardView
+      key={bundle.dashboard.id}
       dashboard={bundle.dashboard}
       reports={bundle.reports}
       dateFields={bundle.dateFields}
