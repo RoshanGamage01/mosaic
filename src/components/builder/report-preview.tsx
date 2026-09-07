@@ -1,11 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { AlertCircle, Code2, Loader2, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertCircle, Loader2, TrendingDown, TrendingUp } from "lucide-react";
 
 import { ChartRenderer } from "@/components/charts/chart-renderer";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toChartData, trendDelta } from "@/lib/query/shape";
 import type { QueryResult, ReportSpec } from "@/lib/types";
@@ -27,8 +25,6 @@ export function ReportPreview({
   height?: number;
   footer?: boolean;
 }) {
-  const [showPipeline, setShowPipeline] = useState(false);
-
   if (error) {
     return (
       <div className="flex min-h-64 flex-col items-center justify-center gap-2 px-6 text-center">
@@ -64,15 +60,9 @@ export function ReportPreview({
 
       <ChartRenderer result={result} spec={spec} height={height} />
 
-      {footer ? (
+      {footer && (trend || result.truncated) ? (
         <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/70 pt-3 text-xs text-muted-foreground">
-          <span>
-            {result.totalRows.toLocaleString()} {result.totalRows === 1 ? "row" : "rows"}
-            {result.truncated ? " (limit reached)" : ""}
-          </span>
-          <span className="text-border">•</span>
-          <span>answered in {result.tookMs} ms</span>
-
+          {result.truncated ? <span>Showing the top results</span> : null}
           {trend ? (
             <Badge
               variant="secondary"
@@ -91,23 +81,7 @@ export function ReportPreview({
               {trend.change.toFixed(1)}% across the period
             </Badge>
           ) : null}
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowPipeline((open) => !open)}
-            className="ml-auto h-7 rounded-lg px-2 text-xs text-muted-foreground"
-          >
-            <Code2 className="size-3.5" />
-            {showPipeline ? "Hide the query" : "Show the query"}
-          </Button>
         </div>
-      ) : null}
-
-      {showPipeline ? (
-        <pre className="mt-3 max-h-72 overflow-auto rounded-xl bg-muted/70 p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
-          {JSON.stringify(result.pipeline, null, 2)}
-        </pre>
       ) : null}
     </div>
   );

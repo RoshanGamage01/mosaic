@@ -258,19 +258,19 @@ export function Studio({
           <div className="space-y-3 border-b border-border/70 px-4 py-3 sm:px-6">
             <div className="flex flex-wrap items-center gap-2">
               <Select
-                value={topic ? `${topic.sourceId}:${topic.collection}` : `${spec.sourceId}:${spec.collection}`}
+                value={topic?.key ?? ""}
                 onValueChange={(value) => {
                   if (!value) return;
-                  const next = topics.find((item) => `${item.sourceId}:${item.collection}` === value);
+                  const next = topics.find((item) => item.key === value);
                   if (next) selectTopic(next);
                 }}
               >
                 <SelectTrigger className="h-9 w-[200px] rounded-xl text-sm">
-                  <SelectValue placeholder="This part of the business" />
+                  <span className="truncate">{topic?.label ?? "This part of the business"}</span>
                 </SelectTrigger>
                 <SelectContent>
                   {topics.map((item) => (
-                    <SelectItem key={`${item.sourceId}:${item.key}`} value={`${item.sourceId}:${item.collection}`}>
+                    <SelectItem key={`${item.sourceId}:${item.key}`} value={item.key}>
                       {item.label}
                     </SelectItem>
                   ))}

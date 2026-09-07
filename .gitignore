@@ -31,7 +31,6 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
 # The template holds only commented placeholders, and the README tells you to
 # copy it, so it has to be in the repo.
 !.env.example
@@ -47,3 +46,4 @@ next-env.d.ts
 /.mosaic/
 /.mongo-data/
 /.mongodb-bin/
+config.bat
