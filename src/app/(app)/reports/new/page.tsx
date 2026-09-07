@@ -7,7 +7,7 @@ export const metadata = { title: "New report" };
 
 export default async function NewReportPage() {
   const tenant = await getCurrentTenant();
-  const catalogs = await loadCatalogs(tenant?.id);
+  const catalogs = await loadCatalogs(tenant?.id, "operator");
   return (
     <NewReportBuilder
       catalogs={catalogs}

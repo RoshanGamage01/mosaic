@@ -1,5 +1,6 @@
 import "server-only";
 
+import { classifyCollection } from "./agent/concepts";
 import { getCurrentTenant } from "./tenant";
 import { store } from "./store";
 import type { Catalog, Tenant } from "./types";
@@ -10,13 +11,31 @@ export type SourceCatalogData = {
   catalog: Catalog;
 };
 
-export async function loadCatalogs(tenantId?: string): Promise<SourceCatalogData[]> {
+function forOperators(catalog: Catalog): Catalog {
+  return {
+    ...catalog,
+    collections: catalog.collections.filter((collection) => {
+      if (collection.hidden) return false;
+      const process = classifyCollection(collection);
+      return process !== "web" && process !== "other";
+    }),
+  };
+}
+
+export async function loadCatalogs(
+  tenantId?: string,
+  mode: "full" | "operator" = "full",
+): Promise<SourceCatalogData[]> {
   const sources = await store.listSources(tenantId);
   const entries = await Promise.all(
     sources.map(async (source) => {
       const catalog = await store.getCatalog(source.id);
       if (!catalog || catalog.collections.length === 0) return null;
-      return { sourceId: source.id, sourceName: source.name, catalog };
+      return {
+        sourceId: source.id,
+        sourceName: source.name,
+        catalog: mode === "operator" ? forOperators(catalog) : catalog,
+      };
     }),
   );
   return entries.filter((entry): entry is SourceCatalogData => entry !== null);

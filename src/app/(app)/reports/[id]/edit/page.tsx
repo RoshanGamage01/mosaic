@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: PageProps<"/reports/[id]/edit
 export default async function EditReportPage({ params }: PageProps<"/reports/[id]/edit">) {
   const { id } = await params;
   const tenant = await getCurrentTenant();
-  const [report, catalogs] = await Promise.all([store.getReport(id), loadCatalogs(tenant?.id)]);
+  const [report, catalogs] = await Promise.all([store.getReport(id), loadCatalogs(tenant?.id, "operator")]);
   if (!report || !tenant || report.tenantId !== tenant.id) notFound();
   return (
     <Studio
