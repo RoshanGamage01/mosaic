@@ -1,52 +1,54 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api, ApiError } from "@/lib/client";
 import type { QueryResult, ReportSpec } from "@/lib/types";
 
-type State = {
+type Loaded = {
+  /** Identifies the spec + refresh count the result belongs to. */
+  key: string | null;
   result: QueryResult | null;
   error: ApiError | null;
-  loading: boolean;
 };
 
 /**
- * Runs a spec against the database, debounced so dragging a slider or typing a
- * filter value does not fire a query per keystroke.
+ * Runs a spec against the database, debounced so typing a filter value does not
+ * fire a query per keystroke. The previous result stays on screen while the new
+ * one loads, which keeps the builder from flashing empty on every edit.
  */
-export function useReportData(spec: ReportSpec | null, { debounce = 350 } = {}): State & {
-  refresh: () => void;
-} {
-  const [state, setState] = useState<State>({ result: null, error: null, loading: Boolean(spec) });
+export function useReportData(spec: ReportSpec | null, { debounce = 350 } = {}) {
+  const [loaded, setLoaded] = useState<Loaded>({ key: null, result: null, error: null });
   const [nonce, setNonce] = useState(0);
-  const latest = useRef(0);
 
-  const key = useMemo(() => (spec ? JSON.stringify(spec) : null), [spec]);
+  const key = useMemo(() => (spec ? `${nonce}|${JSON.stringify(spec)}` : null), [spec, nonce]);
 
   useEffect(() => {
-    if (!key) {
-      setState({ result: null, error: null, loading: false });
-      return;
-    }
-
-    const requestId = ++latest.current;
-    setState((prev) => ({ ...prev, loading: true }));
+    if (!key) return;
+    let cancelled = false;
 
     const timer = setTimeout(() => {
-      api<QueryResult>("/api/query", { method: "POST", json: JSON.parse(key) })
+      api<QueryResult>("/api/query", { method: "POST", json: JSON.parse(key.slice(key.indexOf("|") + 1)) })
         .then((result) => {
-          if (latest.current !== requestId) return;
-          setState({ result, error: null, loading: false });
+          if (!cancelled) setLoaded({ key, result, error: null });
         })
         .catch((error: ApiError) => {
-          if (latest.current !== requestId) return;
-          setState({ result: null, error, loading: false });
+          if (!cancelled) setLoaded({ key, result: null, error });
         });
     }, debounce);
 
-    return () => clearTimeout(timer);
-  }, [key, debounce, nonce]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [key, debounce]);
 
-  return { ...state, refresh: () => setNonce((n) => n + 1) };
+  const refresh = useCallback(() => setNonce((value) => value + 1), []);
+
+  return {
+    result: loaded.result,
+    error: key === loaded.key ? loaded.error : null,
+    loading: key !== null && key !== loaded.key,
+    refresh,
+  };
 }

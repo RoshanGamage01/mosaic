@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowLeft,
   Check,
@@ -110,7 +110,7 @@ function reconcileVisual(spec: ReportSpec): Visual {
 export function ReportBuilder({ catalogs, report, initialSpec, initialName }: Props) {
   const router = useRouter();
 
-  const [spec, setSpec] = useState<ReportSpec | null>(() => {
+  const [draft, setSpec] = useState<ReportSpec | null>(() => {
     if (report) return report.spec;
     const base = starterSpec(catalogs);
     if (!base) return null;
@@ -121,16 +121,17 @@ export function ReportBuilder({ catalogs, report, initialSpec, initialName }: Pr
   const [savedId, setSavedId] = useState(report?.id ?? null);
 
   const collection = useMemo(
-    () => (spec ? findCollection(catalogs, spec.sourceId, spec.collection) : undefined),
-    [catalogs, spec],
+    () => (draft ? findCollection(catalogs, draft.sourceId, draft.collection) : undefined),
+    [catalogs, draft],
   );
 
-  // The shape has to follow the question, otherwise the preview silently breaks.
-  useEffect(() => {
-    if (!spec) return;
-    const next = reconcileVisual(spec);
-    if (next !== spec.visual) setSpec({ ...spec, visual: next });
-  }, [spec]);
+  // The shape has to follow the question. Rather than let an invalid chart type
+  // linger in state, the effective spec always carries a shape that can render.
+  const spec = useMemo(() => {
+    if (!draft) return null;
+    const visual = reconcileVisual(draft);
+    return visual === draft.visual ? draft : { ...draft, visual };
+  }, [draft]);
 
   const { result, error, loading } = useReportData(spec);
   const warnings = useMemo(
