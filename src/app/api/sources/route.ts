@@ -2,22 +2,15 @@ import { z } from "zod";
 
 import { fail, handleError, newId, ok } from "@/lib/api";
 import { inspectServer } from "@/lib/agent/register";
+import { hostOf, withoutConnectionLink } from "@/lib/redact";
 import { store } from "@/lib/store";
 import type { DataSource } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** The connection link is a secret; it never leaves the server. */
 function redact(source: DataSource) {
-  const { uri, ...rest } = source;
-  let host = "";
-  try {
-    host = new URL(uri.replace("mongodb+srv://", "https://").replace("mongodb://", "http://")).host;
-  } catch {
-    host = "unknown host";
-  }
-  return { ...rest, host };
+  return { ...withoutConnectionLink(source), host: hostOf(source.uri) };
 }
 
 export async function GET() {

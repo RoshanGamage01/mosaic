@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { fail, handleError, ok } from "@/lib/api";
 import { closeClient } from "@/lib/agent/client";
+import { withoutConnectionLink } from "@/lib/redact";
 import { store } from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -15,8 +16,7 @@ export async function GET(_request: Request, { params }: Params) {
     const source = await store.getSource(id);
     if (!source) return fail("That connection no longer exists.", 404);
     const catalog = await store.getCatalog(id);
-    const { uri: _uri, ...rest } = source;
-    return ok({ source: rest, catalog: catalog ?? null });
+    return ok({ source: withoutConnectionLink(source), catalog: catalog ?? null });
   } catch (error) {
     return handleError(error);
   }
@@ -33,8 +33,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const body = patchSchema.parse(await request.json());
     const updated = await store.patchSource(id, body);
     if (!updated) return fail("That connection no longer exists.", 404);
-    const { uri: _uri, ...rest } = updated;
-    return ok(rest);
+    return ok(withoutConnectionLink(updated));
   } catch (error) {
     return handleError(error);
   }

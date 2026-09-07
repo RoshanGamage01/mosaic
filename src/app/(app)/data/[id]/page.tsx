@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { CatalogExplorer } from "@/components/data/catalog-explorer";
 import { PageBody } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { withoutConnectionLink } from "@/lib/redact";
 import { store } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export default async function DataSourcePage({ params }: PageProps<"/data/[id]">
   if (!source) notFound();
 
   const catalog = await store.getCatalog(id);
-  const { uri: _uri, ...safe } = source;
+  const safe = withoutConnectionLink(source);
 
   return (
     <PageBody className="space-y-5">
