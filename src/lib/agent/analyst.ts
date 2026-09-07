@@ -43,7 +43,7 @@ function pack(tiles: { reportId: string; width: number }[]): Tile[] {
   const close = () => {
     const used = row.reduce((sum, tile) => sum + tile.width, 0);
     const slack = GRID - used;
-    if (row.length && slack > 0) {
+    if (row.length >= 2 && slack > 0) {
       const share = Math.floor(slack / row.length);
       row.forEach((tile) => (tile.width += share));
       row[row.length - 1].width += slack - share * row.length;
